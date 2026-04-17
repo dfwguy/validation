@@ -1,4 +1,4 @@
-1. **Is the infrastructure defective?**  
+1. **Is the hardware defective?**  
     We are delivering an AI Factory in the customer’s environment, and that means validating that the hardware is not defective when it is assembled together as a single system. This includes identifying hardware that fails to meet performance expectations in larger-scale or multi-node GPU-to-GPU scenarios. When hardware does not meet those standards, part of our role is to identify it and drive replacement or remediation.
 
 2. **Is the infrastructure defective?**  
