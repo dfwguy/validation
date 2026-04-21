@@ -16,3 +16,6 @@
 [submodule "meta-csp-nccl-tests"]
 	path = meta-csp-nccl-tests
 	url = ssh://git@gitlab-master.nvidia.com:12051/nvis-npi/META_CSP_NCCL_Tests.git
+[submodule "nvis-exemplar"]
+	path = nvis-exemplar
+	url = ssh://git@gitlab-master.nvidia.com:12051/nvis-npi/nvis_exemplar.git
