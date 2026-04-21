@@ -53,32 +53,44 @@ Tests run in execution order: initial system checks through full-scale workload 
 
 ---
 
-## Time to Market (TTM) — Reduced Scope Handovers
+## TTM — Single Node (8-Way)
 
-When handing over a **single node** or a **rack** (rather than a full scalable unit), multi-node tests that require fabric or cross-node topology are removed. The table below shows which tests survive each scope reduction. Tests marked **Removed** are dropped entirely; tests marked **Scoped** run but only against the nodes being handed over.
+Handing over individual 8-way nodes. No peer nodes available, so all inter-node and multi-node tests are removed.
 
-| # | Test Name | Tier | Single Node | Rack |
-|---|-----------|------|-------------|------|
-| 1 | Pre-Flight Checks | SNT1 | Included | Included |
-| 2 | DCGM Diagnostics (`dcgmi -r 3`) | SNT2 | Included | Included |
-| 3 | NCCL Single-Node — NVLink | SNT2 | Included | Included |
-| 4 | NCCL Single-Node — No NVLink | SNT2 | Included | Included |
-| 5 | MNUberGEMM Burn-In | SNT3 | Included | Included |
-| 6 | Intermediate NCCL + Workload Tests | — | **Removed** — no peer nodes for inter-node collectives or distributed workload | Scoped to rack nodes |
-| 7 | Network Fabric Health Check | MNT1 | **Removed** — no fabric to validate | Included |
-| 8 | NCCL AllReduce / AllToAll — Rack | MNT2 | **Removed** | Included |
-| 9 | NCCL AllReduce / AllToAll — Scalable Unit | MNT2 | **Removed** | **Removed** — no full SU |
-| 10 | NCCL AllReduce / AllToAll — Across SUs | MNT2 | **Removed** | **Removed** — single rack only |
-| 11 | NCCL AllReduce / AllToAll — All Handover Hosts | MNT2 | **Removed** | Scoped to rack |
-| 12 | Llama 3.1 403B Pre-Training | MNT3 | **Removed** | **Removed** — workload requires multi-rack scale |
-| 13 | Nemotron 3 | MNT3 | **Removed** | **Removed** — workload requires multi-rack scale |
+| # | Test Name | Tier | Status |
+|---|-----------|------|--------|
+| 1 | Pre-Flight Checks | SNT1 | Included |
+| 2 | DCGM Diagnostics (`dcgmi -r 3`) | SNT2 | Included |
+| 3 | NCCL Single-Node — NVLink | SNT2 | Included |
+| 4 | NCCL Single-Node — No NVLink | SNT2 | Included |
+| 5 | MNUberGEMM Burn-In | SNT3 | Included |
+| 6 | Intermediate NCCL + Workload Tests | — | **Removed** — inter-node collectives and distributed workload require peer nodes |
+| 7 | Network Fabric Health Check | MNT1 | Included — validates fabric port and link health for the node |
+| 8 | NCCL AllReduce / AllToAll — Rack | MNT2 | **Removed** — no peer nodes |
+| 9 | NCCL AllReduce / AllToAll — Scalable Unit | MNT2 | **Removed** — no peer nodes |
+| 10 | NCCL AllReduce / AllToAll — Across SUs | MNT2 | **Removed** — no peer nodes |
+| 11 | NCCL AllReduce / AllToAll — All Handover Hosts | MNT2 | **Removed** — redundant with single-node NCCL |
+| 12 | Llama 3.1 403B Pre-Training | MNT3 | **Removed** — requires multi-node distributed training |
+| 13 | Nemotron 3 | MNT3 | **Removed** — requires multi-node distributed training |
 
-### TTM Coverage Summary
+---
 
-| Scope | Tests Run | Tests Removed |
-|-------|-----------|---------------|
-| Single Node | SNT1–SNT3 (tests 1–5) | Tests 6–13 |
-| Rack | SNT1–SNT3 + MNT1–MNT2 (tests 1–8, 11 scoped) | Tests 9, 10, 12, 13 |
-| Sweet Spot / Hybrid | All tests | — |
+## TTM — Rack (NVL72)
 
-> **What this means at handover:** A single-node TTM handover confirms the node is individually healthy but provides no signal on fabric, inter-node bandwidth, or distributed workload behavior. A rack TTM handover validates intra-rack fabric and collective performance but cannot confirm SU-level routing, cross-SU paths, or production-scale model training throughput. Customers receiving TTM handovers should expect remaining MNT-tier validation to complete before full production load is placed on the system.
+Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack scope. Tests that require SU-level topology or span the full deployment are removed.
+
+| # | Test Name | Tier | Status |
+|---|-----------|------|--------|
+| 1 | Pre-Flight Checks | SNT1 | Included |
+| 2 | DCGM Diagnostics (`dcgmi -r 3`) | SNT2 | Included |
+| 3 | NCCL Single-Node — NVLink | SNT2 | Included |
+| 4 | NCCL Single-Node — No NVLink | SNT2 | Included |
+| 5 | MNUberGEMM Burn-In | SNT3 | Included |
+| 6 | Intermediate NCCL + Workload Tests | — | Included — scoped to rack nodes |
+| 7 | Network Fabric Health Check | MNT1 | Included |
+| 8 | NCCL AllReduce / AllToAll — Rack | MNT2 | Included |
+| 9 | NCCL AllReduce / AllToAll — Scalable Unit | MNT2 | **Removed** — single rack; no SU-level topology |
+| 10 | NCCL AllReduce / AllToAll — Across SUs | MNT2 | **Removed** — no cross-SU paths in a single rack |
+| 11 | NCCL AllReduce / AllToAll — All Handover Hosts | MNT2 | **Removed** — spans all nodes in the full deployment, not just this rack |
+| 12 | Llama 3.1 403B Pre-Training | MNT3 | Included — scoped to NVL72 rack |
+| 13 | Nemotron 3 | MNT3 | Included — scoped to NVL72 rack |
