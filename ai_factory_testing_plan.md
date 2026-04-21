@@ -143,4 +143,3 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 
 - **Workload naming: "Nemotron 3" vs "Nemotron-4"** — Test #13 lists "Nemotron 3" but the [GB200 MOP](validation-mops/GB200_MOP.md) uses Nemotron-4 (15B, via `llmb-run`), and the [GB300/B300 MOP](validation-mops/GB300_B300_Validation_MOP.md) uses DeepSeek-V3 671B FP8 as the Phase 1 workload. Confirm whether test #13 should reference Nemotron-4 (or a platform-appropriate equivalent) and update accordingly.
 
-- **Exhaustive methodology not represented** — The methodology document defines three approaches: Hybrid, Exhaustive, and Time To Market. This plan covers Hybrid (main table) and the two partial-delivery scenarios but has no Exhaustive section. If this plan is meant to cover all methodology options, add an Exhaustive scenario table. If it intentionally omits it, note that Exhaustive is the remediation path for Hybrid failures and is defined in the methodology document.
