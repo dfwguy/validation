@@ -4,7 +4,7 @@ Tests run in execution order: initial system checks through full-scale workload 
 
 ---
 
-## Test Execution Order
+## Test Execution Order — Sweet Spot / Hybrid
 
 | # | Test Name | Purpose | Duration | Test Tier |
 |---|-----------|---------|----------|-----------|
@@ -50,3 +50,35 @@ Tests run in execution order: initial system checks through full-scale workload 
 - Network Fabric Health Check (#7) must show a clean dashboard and passing CVT (or equivalent) before rack-level NCCL tests begin.
 - Nodes failing single-node NCCL, burn-in, or intermediate NCCL are removed from the handover pool and re-queued for hardware investigation.
 - Duration estimates vary with cluster size, message sizes, and iteration counts configured per site.
+
+---
+
+## Time to Market (TTM) — Reduced Scope Handovers
+
+When handing over a **single node** or a **rack** (rather than a full scalable unit), multi-node tests that require fabric or cross-node topology are removed. The table below shows which tests survive each scope reduction. Tests marked **Removed** are dropped entirely; tests marked **Scoped** run but only against the nodes being handed over.
+
+| # | Test Name | Tier | Single Node | Rack |
+|---|-----------|------|-------------|------|
+| 1 | Pre-Flight Checks | SNT1 | Included | Included |
+| 2 | DCGM Diagnostics (`dcgmi -r 3`) | SNT2 | Included | Included |
+| 3 | NCCL Single-Node — NVLink | SNT2 | Included | Included |
+| 4 | NCCL Single-Node — No NVLink | SNT2 | Included | Included |
+| 5 | MNUberGEMM Burn-In | SNT3 | Included | Included |
+| 6 | Intermediate NCCL + Workload Tests | — | **Removed** — no peer nodes for inter-node collectives or distributed workload | Scoped to rack nodes |
+| 7 | Network Fabric Health Check | MNT1 | **Removed** — no fabric to validate | Included |
+| 8 | NCCL AllReduce / AllToAll — Rack | MNT2 | **Removed** | Included |
+| 9 | NCCL AllReduce / AllToAll — Scalable Unit | MNT2 | **Removed** | **Removed** — no full SU |
+| 10 | NCCL AllReduce / AllToAll — Across SUs | MNT2 | **Removed** | **Removed** — single rack only |
+| 11 | NCCL AllReduce / AllToAll — All Handover Hosts | MNT2 | **Removed** | Scoped to rack |
+| 12 | Llama 3.1 403B Pre-Training | MNT3 | **Removed** | **Removed** — workload requires multi-rack scale |
+| 13 | Nemotron 3 | MNT3 | **Removed** | **Removed** — workload requires multi-rack scale |
+
+### TTM Coverage Summary
+
+| Scope | Tests Run | Tests Removed |
+|-------|-----------|---------------|
+| Single Node | SNT1–SNT3 (tests 1–5) | Tests 6–13 |
+| Rack | SNT1–SNT3 + MNT1–MNT2 (tests 1–8, 11 scoped) | Tests 9, 10, 12, 13 |
+| Sweet Spot / Hybrid | All tests | — |
+
+> **What this means at handover:** A single-node TTM handover confirms the node is individually healthy but provides no signal on fabric, inter-node bandwidth, or distributed workload behavior. A rack TTM handover validates intra-rack fabric and collective performance but cannot confirm SU-level routing, cross-SU paths, or production-scale model training throughput. Customers receiving TTM handovers should expect remaining MNT-tier validation to complete before full production load is placed on the system.
