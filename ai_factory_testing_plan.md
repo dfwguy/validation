@@ -124,3 +124,23 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 - [Meta CSP NCCL Tests](meta-csp-nccl-tests/Meta_CSP_NCCL_Tests.md) — NCCL test procedures and configurations used for CSP-scale validation
 - [NVIS Exemplar MOP](nvis-exemplar/Exemplar_MOP.md) — reference MOP for NVIS exemplar cluster validation and delivery
 - [LLM Benchmarking Collection (Internal)](llm-benchmarking-collection-internal/exemplar.yaml) — source of the Exemplar workload definition; `exemplar.yaml` defines the LLM training benchmark configuration used in Exemplar runs (branch: `perf/26.02`)
+
+---
+
+## To-Do / To Reconcile
+
+### High Priority
+
+- **"Time to Market" naming collision** — The two TTM sections (Single Node, Rack) include MNUberGEMM Burn-In (SNT3), which the [NVIS AI Factory Delivery Methodology](clustermods-methodology/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md) explicitly defines as Hybrid content, not TTM. The methodology's TTM runs only the shared baseline (inventory + minimum viable fabric + representative workload) with no burn-in or extra campaigns. What these sections actually describe is **Hybrid methodology scoped to a smaller delivery increment** (single node or single rack). Options: rename the sections to "Hybrid — Single Node" and "Hybrid — Rack," or add an explicit callout that these scenarios apply Hybrid methodology depth at a partial-delivery granularity.
+
+- **Hybrid section omits Path B → Exhaustive bifurcation** — The methodology defines Hybrid as a bifurcation: Path A (passing nodes) goes to production; Path B (failing nodes/scope) enters full Exhaustive validation (SNT1 → SNT2 → SNT3 → MNT as required). The pass/fail table captures the gating logic but does not describe what happens to failed scope. Add a note or row clarifying that quarantined nodes follow the Exhaustive path per the methodology.
+
+### Medium Priority
+
+- **DCGM diagnostic level mismatch** — This plan specifies `dcgmi -r 3` (Level 3, ~20 min) in test #2. Both the [GB200 MOP](validation-mops/GB200_MOP.md) and [GB300/B300 MOP](validation-mops/GB300_B300_Validation_MOP.md) use `dcgmi diag -r 2` (Level 2). Decide which level is correct for this plan and align the MOPs or document the rationale for running Level 3 here.
+
+### Low Priority
+
+- **Workload naming: "Nemotron 3" vs "Nemotron-4"** — Test #13 lists "Nemotron 3" but the [GB200 MOP](validation-mops/GB200_MOP.md) uses Nemotron-4 (15B, via `llmb-run`), and the [GB300/B300 MOP](validation-mops/GB300_B300_Validation_MOP.md) uses DeepSeek-V3 671B FP8 as the Phase 1 workload. Confirm whether test #13 should reference Nemotron-4 (or a platform-appropriate equivalent) and update accordingly.
+
+- **Exhaustive methodology not represented** — The methodology document defines three approaches: Hybrid, Exhaustive, and Time To Market. This plan covers Hybrid (main table) and the two partial-delivery scenarios but has no Exhaustive section. If this plan is meant to cover all methodology options, add an Exhaustive scenario table. If it intentionally omits it, note that Exhaustive is the remediation path for Hybrid failures and is defined in the methodology document.
