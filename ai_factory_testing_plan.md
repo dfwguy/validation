@@ -113,17 +113,17 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 
 ## Reference
 
-- [NVIS AI Factory Delivery Methodology](clustermods-methodology/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#52-cluster-validation-test-tiers) — test tiers SNT1–SNT3 and MNT1–MNT3, delivery methodologies (Hybrid, Exhaustive, Time To Market), and grouping rules
-- [ClusterMODS MOP](cmods-docs/MOP/CMODS-MOP-NEW.md) — ClusterMODS installation, configuration, test plan execution, and node management
-- [NVIS HPC SA Repository](hpc-row-scripts/) — scripts and documentation for provisioning and validating SuperPOD clusters: firmware, network, storage, BCM, and validation tooling
-- [GB200 NVL72 Validation MOP](validation-mops/GB200_MOP.md) — three-phase validation procedure for GB200 clusters
-- [GB300 / B300 Validation MOP](validation-mops/GB300_B300_Validation_MOP.md) — three-phase validation procedure for GB300 and B300 clusters
-- [Cable Validation Tool (CVT) MOP](validation-mops/Cable-Validation-Tool-MOP.md) — deploying and running CVT to validate Layer 1 cabling against a golden P2P topology file (referenced in test #7)
-- [ClusterMinder MOP](validation-mops/ClusterMinder-MOP.md) — deploying ClusterMinder for cluster-wide power, temperature, and health telemetry via Redfish BMC
-- [NVIS Observability Suite](nvis-observability/README.md) — GPU health (DCGM), network fabric dashboards, Slurm job telemetry, and log correlation; primary tool for fabric monitoring in test #7 and ongoing observability through handover
-- [Meta CSP NCCL Tests](meta-csp-nccl-tests/Meta_CSP_NCCL_Tests.md) — NCCL test procedures and configurations used for CSP-scale validation
-- [NVIS Exemplar MOP](nvis-exemplar/Exemplar_MOP.md) — reference MOP for NVIS exemplar cluster validation and delivery
-- [LLM Benchmarking Collection (Internal)](llm-benchmarking-collection-internal/exemplar.yaml) — source of the Exemplar workload definition; `exemplar.yaml` defines the LLM training benchmark configuration used in Exemplar runs (branch: `perf/26.02`)
+- [NVIS AI Factory Delivery Methodology](https://gitlab-master.nvidia.com/nvis-npi/clustermods-methodology/-/blob/main/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#52-cluster-validation-test-tiers) — test tiers SNT1–SNT3 and MNT1–MNT3, delivery methodologies (Hybrid, Exhaustive, Time To Market), and grouping rules
+- [ClusterMODS MOP](https://gitlab-master.nvidia.com/raynetworks/cmods-docs/-/blob/main/MOP/CMODS-MOP-NEW.md) — ClusterMODS installation, configuration, test plan execution, and node management
+- [NVIS HPC SA Repository](https://gitlab-master.nvidia.com/nvis-row/hpc/-/tree/main) — scripts and documentation for provisioning and validating SuperPOD clusters: firmware, network, storage, BCM, and validation tooling
+- [GB200 NVL72 Validation MOP](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB200_MOP.md) — three-phase validation procedure for GB200 clusters
+- [GB300 / B300 Validation MOP](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB300_B300_Validation_MOP.md) — three-phase validation procedure for GB300 and B300 clusters
+- [Cable Validation Tool (CVT) MOP](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/Cable-Validation-Tool-MOP.md) — deploying and running CVT to validate Layer 1 cabling against a golden P2P topology file (referenced in test #7)
+- [ClusterMinder MOP](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/ClusterMinder-MOP.md) — deploying ClusterMinder for cluster-wide power, temperature, and health telemetry via Redfish BMC
+- [NVIS Observability Suite](https://gitlab-master.nvidia.com/nvis-ova/nvis-observability/-/blob/main/README.md) — GPU health (DCGM), network fabric dashboards, Slurm job telemetry, and log correlation; primary tool for fabric monitoring in test #7 and ongoing observability through handover
+- [Meta CSP NCCL Tests](https://gitlab-master.nvidia.com/nvis-npi/META_CSP_NCCL_Tests/-/blob/main/Meta_CSP_NCCL_Tests.md) — NCCL test procedures and configurations used for CSP-scale validation
+- [NVIS Exemplar MOP](https://gitlab-master.nvidia.com/nvis-npi/nvis_exemplar/-/blob/main/Exemplar_MOP.md) — reference MOP for NVIS exemplar cluster validation and delivery
+- [LLM Benchmarking Collection (Internal)](https://gitlab-master.nvidia.com/unified-cloud-benchmarking/llm-benchmarking-collection-internal/-/blob/perf/26.02/exemplar.yaml) — source of the Exemplar workload definition; `exemplar.yaml` defines the LLM training benchmark configuration used in Exemplar runs (branch: `perf/26.02`)
 
 ---
 
