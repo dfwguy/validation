@@ -19,3 +19,7 @@
 [submodule "nvis-exemplar"]
 	path = nvis-exemplar
 	url = ssh://git@gitlab-master.nvidia.com:12051/nvis-npi/nvis_exemplar.git
+[submodule "llm-benchmarking-collection-internal"]
+	path = llm-benchmarking-collection-internal
+	url = ssh://git@gitlab-master.nvidia.com:12051/unified-cloud-benchmarking/llm-benchmarking-collection-internal.git
+	branch = perf/26.02

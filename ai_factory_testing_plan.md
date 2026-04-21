@@ -123,3 +123,4 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 - [NVIS Observability Suite](nvis-observability/README.md) — GPU health (DCGM), network fabric dashboards, Slurm job telemetry, and log correlation; primary tool for fabric monitoring in test #7 and ongoing observability through handover
 - [Meta CSP NCCL Tests](meta-csp-nccl-tests/Meta_CSP_NCCL_Tests.md) — NCCL test procedures and configurations used for CSP-scale validation
 - [NVIS Exemplar MOP](nvis-exemplar/Exemplar_MOP.md) — reference MOP for NVIS exemplar cluster validation and delivery
+- [LLM Benchmarking Collection (Internal)](llm-benchmarking-collection-internal/exemplar.yaml) — source of the Exemplar workload definition; `exemplar.yaml` defines the LLM training benchmark configuration used in Exemplar runs (branch: `perf/26.02`)
