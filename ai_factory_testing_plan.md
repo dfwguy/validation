@@ -53,7 +53,7 @@ Tests run in execution order: initial system checks through full-scale workload 
 
 ---
 
-## TTM — Single Node (8-Way)
+## Time to Market — Single Node (8-Way)
 
 Handing over individual 8-way nodes. No peer nodes available, so all inter-node and multi-node tests are removed.
 
@@ -75,7 +75,7 @@ Handing over individual 8-way nodes. No peer nodes available, so all inter-node 
 
 ---
 
-## TTM — Rack (NVL72)
+## Time to Market — Rack (NVL72)
 
 Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack scope. Tests that require SU-level topology or span the full deployment are removed.
 
