@@ -94,3 +94,13 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 | 11 | NCCL AllReduce / AllToAll — All Handover Hosts | MNT2 | **Removed** — spans all nodes in the full deployment, not just this rack |
 | 12 | Llama 3.1 403B Pre-Training | MNT3 | Included — scoped to NVL72 rack |
 | 13 | Nemotron 3 | MNT3 | Included — scoped to NVL72 rack |
+
+---
+
+## Reference
+
+Test tiers SNT1–SNT3 and MNT1–MNT3, delivery methodologies (Hybrid, Exhaustive, Time To Market), and grouping rules are defined in the [NVIS AI Factory Delivery Methodology](clustermods-methodology/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#52-cluster-validation-test-tiers).
+
+ClusterMODS installation, configuration, test plan execution, and node management procedures are in the [ClusterMODS MOP](cmods-docs/MOP/CMODS-MOP-NEW.md).
+
+Scripts and documentation for provisioning and validating SuperPOD clusters — firmware, network, storage, BCM, and validation tooling — are in the [NVIS HPC SA repository](hpc-row-scripts/).

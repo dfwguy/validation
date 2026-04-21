@@ -1,3 +1,9 @@
 [submodule "clustermods-methodology"]
 	path = clustermods-methodology
 	url = ssh://git@gitlab-master.nvidia.com:12051/nvis-npi/clustermods-methodology.git
+[submodule "cmods-docs"]
+	path = cmods-docs
+	url = ssh://git@gitlab-master.nvidia.com:12051/raynetworks/cmods-docs.git
+[submodule "hpc-row-scripts"]
+	path = hpc-row-scripts
+	url = ssh://git@gitlab-master.nvidia.com:12051/nvis-row/hpc.git
