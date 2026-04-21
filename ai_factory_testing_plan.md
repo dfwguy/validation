@@ -99,8 +99,11 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 
 ## Reference
 
-Test tiers SNT1–SNT3 and MNT1–MNT3, delivery methodologies (Hybrid, Exhaustive, Time To Market), and grouping rules are defined in the [NVIS AI Factory Delivery Methodology](clustermods-methodology/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#52-cluster-validation-test-tiers).
-
-ClusterMODS installation, configuration, test plan execution, and node management procedures are in the [ClusterMODS MOP](cmods-docs/MOP/CMODS-MOP-NEW.md).
-
-Scripts and documentation for provisioning and validating SuperPOD clusters — firmware, network, storage, BCM, and validation tooling — are in the [NVIS HPC SA repository](hpc-row-scripts/).
+- [NVIS AI Factory Delivery Methodology](clustermods-methodology/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#52-cluster-validation-test-tiers) — test tiers SNT1–SNT3 and MNT1–MNT3, delivery methodologies (Hybrid, Exhaustive, Time To Market), and grouping rules
+- [ClusterMODS MOP](cmods-docs/MOP/CMODS-MOP-NEW.md) — ClusterMODS installation, configuration, test plan execution, and node management
+- [NVIS HPC SA Repository](hpc-row-scripts/) — scripts and documentation for provisioning and validating SuperPOD clusters: firmware, network, storage, BCM, and validation tooling
+- [GB200 NVL72 Validation MOP](validation-mops/GB200_MOP.md) — three-phase validation procedure for GB200 clusters
+- [GB300 / B300 Validation MOP](validation-mops/GB300_B300_Validation_MOP.md) — three-phase validation procedure for GB300 and B300 clusters
+- [Cable Validation Tool (CVT) MOP](validation-mops/Cable-Validation-Tool-MOP.md) — deploying and running CVT to validate Layer 1 cabling against a golden P2P topology file (referenced in test #7)
+- [ClusterMinder MOP](validation-mops/ClusterMinder-MOP.md) — deploying ClusterMinder for cluster-wide power, temperature, and health telemetry via Redfish BMC
+- [NVIS Observability Suite](nvis-observability/README.md) — GPU health (DCGM), network fabric dashboards, Slurm job telemetry, and log correlation; primary tool for fabric monitoring in test #7 and ongoing observability through handover

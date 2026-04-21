@@ -7,3 +7,9 @@
 [submodule "hpc-row-scripts"]
 	path = hpc-row-scripts
 	url = ssh://git@gitlab-master.nvidia.com:12051/nvis-row/hpc.git
+[submodule "validation-mops"]
+	path = validation-mops
+	url = ssh://git@gitlab-master.nvidia.com:12051/nvis-npi/validation-mops.git
+[submodule "nvis-observability"]
+	path = nvis-observability
+	url = ssh://git@gitlab-master.nvidia.com:12051/nvis-ova/nvis-observability.git
