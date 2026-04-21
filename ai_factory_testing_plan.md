@@ -97,6 +97,20 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 
 ---
 
+## Tools for Exhaustive Testing of All Components
+
+| Tool | Source | Category | What It Tests |
+|------|--------|----------|---------------|
+| **stress-ng** | `apt install stress-ng` / [github.com/ColinIanKing/stress-ng](https://github.com/ColinIanKing/stress-ng) | CPU / memory / I/O stress | General-purpose system stressor. Exercises CPU (arithmetic, bit-ops, SIMD), memory subsystem (mmap, vm, cache), I/O, and OS primitives via hundreds of configurable stressors. Used to expose thermal instability, power-delivery limits, and hardware faults on compute nodes before GPU-level burn-in. |
+| **STREAM** | [cs.virginia.edu/stream](https://www.cs.virginia.edu/stream/) | Memory bandwidth | The industry-standard benchmark for sustained CPU memory bandwidth. Measures Copy, Scale, Add, and Triad throughputs (GB/s) against system-memory arrays too large to fit in cache. Validates DRAM channels and NUMA configuration on CPU nodes; used as the memory-bandwidth baseline before GPU workloads. |
+| **stressapptest** | [github.com/stressapptest/stressapptest](https://github.com/stressapptest/stressapptest) | Memory integrity | Google's memory and I/O stress test. Randomizes memory access patterns across all DRAM while simultaneously stressing I/O and network paths. Designed to find marginal DRAM cells, ECC-uncorrectable errors, and signal-integrity faults that lighter tests miss. Used for extended CPU-node memory validation. |
+| **fio** | `apt install fio` / [github.com/axboe/fio](https://github.com/axboe/fio) | Storage I/O | Flexible I/O tester for block and file storage. Configures arbitrary mixes of sequential/random reads and writes at any queue depth, block size, and thread count. Measures throughput (MB/s), IOPS, and latency (µs p50/p99/p999). Used to validate local NVMe drives and shared storage mounts (e.g., VAST, Lustre, WekaFS) against expected performance targets. |
+| **ethr** | [github.com/microsoft/ethr](https://github.com/microsoft/ethr) | Network throughput & latency | TCP/UDP/ICMP network performance tool for in-band and storage network validation. Measures bandwidth, packets-per-second, and round-trip latency between node pairs. Used to verify in-band management network links and storage fabric NICs (ConnectX / BlueField) before and after GPU-level networking tests. Complements NCCL tests by isolating CPU-side network performance from GPU-to-GPU collective performance. |
+| **perftest** | `apt install perftest` / [github.com/linux-rdma/perftest](https://github.com/linux-rdma/perftest) | RDMA / InfiniBand per-link | Suite of RDMA micro-benchmarks (`ib_write_bw`, `ib_read_bw`, `ib_send_bw`, `ib_write_lat`, `ib_read_lat`) that measure bandwidth and latency on individual InfiniBand ports between a pair of nodes. Unlike NCCL, which aggregates across all links simultaneously, perftest isolates a single port pair — making it the right tool for identifying a degraded transceiver, a bad cable, or a misconfigured HCA before collective tests obscure the fault behind aggregate numbers. |
+| **nvbandwidth** | [github.com/NVIDIA/nvbandwidth](https://github.com/NVIDIA/nvbandwidth) | GPU memory & PCIe bandwidth | NVIDIA's dedicated bandwidth measurement tool. Quantifies HBM bandwidth per GPU (device-to-device within a node), host-to-device and device-to-host PCIe transfer rates, and NVLink/NVSwitch peer bandwidth. Surfaces regressions that DCGM and MNUberGEMM do not report as explicit bandwidth numbers — in particular, PCIe width or speed negotiation faults (e.g., a GPU training at x8 instead of x16) and HBM channel failures that reduce available memory bandwidth below spec. |
+
+---
+
 ## Reference
 
 - [NVIS AI Factory Delivery Methodology](clustermods-methodology/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#52-cluster-validation-test-tiers) — test tiers SNT1–SNT3 and MNT1–MNT3, delivery methodologies (Hybrid, Exhaustive, Time To Market), and grouping rules
