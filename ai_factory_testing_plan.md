@@ -121,3 +121,4 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 - [Cable Validation Tool (CVT) MOP](validation-mops/Cable-Validation-Tool-MOP.md) — deploying and running CVT to validate Layer 1 cabling against a golden P2P topology file (referenced in test #7)
 - [ClusterMinder MOP](validation-mops/ClusterMinder-MOP.md) — deploying ClusterMinder for cluster-wide power, temperature, and health telemetry via Redfish BMC
 - [NVIS Observability Suite](nvis-observability/README.md) — GPU health (DCGM), network fabric dashboards, Slurm job telemetry, and log correlation; primary tool for fabric monitoring in test #7 and ongoing observability through handover
+- [Meta CSP NCCL Tests](meta-csp-nccl-tests/Meta_CSP_NCCL_Tests.md) — NCCL test procedures and configurations used for CSP-scale validation
