@@ -12,15 +12,16 @@ Tests run in execution order: initial system checks through full-scale workload 
 | 2 | **DCGM Diagnostics (`dcgmi -r 3`)** *(Automated)* | Run level-3 DCGM diagnostics on all nodes. Validates GPU memory, compute, and interconnect health per node before committing to long burn-in. Quarantines failing nodes early. | ~20 min | SNT2 |
 | 3 | **NCCL AllReduce / AllToAll — Single Node, NVLink** *(Automated)* | Validate intra-node GPU collective bandwidth/latency over NVLink/NVSwitch. Establishes per-node NVLink baseline. | < 5 min | SNT2 |
 | 4 | **NCCL AllReduce / AllToAll — Single Node, No NVLink** *(Automated)* | Validate intra-node GPU collectives over PCIe only. Confirms PCIe integrity; regression reference for nodes where NVLink is unavailable or degraded. | < 5 min | SNT2 |
-| 5 | **MNUberGEMM Burn-In** *(Automated)* | Stress-test all GPUs via max-intensity GEMM to expose thermal instability, memory errors, power delivery issues, and infant-mortality faults. | 24–72 hrs | SNT3 |
-| 6 | **Intermediate NCCL + Workload Tests** *(During Burn-In)* | MNUberGEMM is paused at burn-in checkpoints to run AllReduce/AllToAll on partial node subsets and a small-scale workload (reduced-iteration pre-training) on a node subset. Provides early signal on inter-node network functionality and confirms containers are healthy and workloads behave as expected before full-scale tests. | ~20 min/subset | — |
-| 7 | **Network Fabric Health Check** | Confirm network dashboard is green and CVT (or equivalent fabric validation tool) reports no errors. Validates fabric inventory, topology, and link health across the full scope before performance testing begins. | ~15 min | MNT1 |
-| 8 | **NCCL AllReduce / AllToAll — Rack** | Validate collectives across all nodes in a rack. Exercises ToR switch paths and RDMA fabric cabling under all-to-all traffic. | ~5 min | MNT2 |
-| 9 | **NCCL AllReduce / AllToAll — Scalable Unit (SU)** | Validate inter-node bandwidth/latency across all nodes in a single SU over RDMA. Identifies rail misconfigs, bad cables, or underperforming HCAs. | ~5 min | MNT2 |
-| 10 | **NCCL AllReduce / AllToAll — Across SUs** | Validate collectives spanning multiple SUs. Exercises spine switching, inter-SU cabling, and routing tables. | ~5 min | MNT2 |
-| 11 | **NCCL AllReduce / AllToAll — All Handover Hosts** | Full-fabric collective test across all handover nodes. Confirms end-to-end network health and bisection bandwidth at production scale. Must pass before model-level tests. | ~5 min | MNT2 |
-| 12 | **Llama 3.1 403B Pre-Training — All Handover Hosts** | End-to-end pre-training across all handover nodes. Validates target MFU with no loss spikes, checkpoint corruption, or node dropouts. | ~45 min | MNT3 |
-| 13 | **Nemotron 3 — All Handover Hosts** | Nemotron 3 workload across all handover nodes. Second independent signal of system health; validates NVIDIA-specific kernels and training stack. | ~1 hr | MNT3 |
+| 5 | **NVSM Stress Test** *(Automated)* | Run NVSM stress across all node GPUs to validate compute, memory, and thermal stability at the system level. Executed after single-node NCCL validation to catch system-level health issues before committing to extended burn-in. Quarantines failing nodes before MNUberGEMM. | ~20 min | SNT1 |
+| 6 | **MNUberGEMM Burn-In** *(Automated)* | Stress-test all GPUs via max-intensity GEMM to expose thermal instability, memory errors, power delivery issues, and infant-mortality faults. | 24–72 hrs | SNT3 |
+| 7 | **Intermediate NCCL + Workload Tests** *(During Burn-In)* | MNUberGEMM is paused at burn-in checkpoints to run AllReduce/AllToAll on partial node subsets and a small-scale workload (reduced-iteration pre-training) on a node subset. Provides early signal on inter-node network functionality and confirms containers are healthy and workloads behave as expected before full-scale tests. | ~20 min/subset | — |
+| 8 | **Network Fabric Health Check** | Confirm network dashboard is green and CVT (or equivalent fabric validation tool) reports no errors. Validates fabric inventory, topology, and link health across the full scope before performance testing begins. | ~15 min | MNT1 |
+| 9 | **NCCL AllReduce / AllToAll — Rack** | Validate collectives across all nodes in a rack. Exercises ToR switch paths and RDMA fabric cabling under all-to-all traffic. | ~5 min | MNT2 |
+| 10 | **NCCL AllReduce / AllToAll — Scalable Unit (SU)** | Validate inter-node bandwidth/latency across all nodes in a single SU over RDMA. Identifies rail misconfigs, bad cables, or underperforming HCAs. | ~5 min | MNT2 |
+| 11 | **NCCL AllReduce / AllToAll — Across SUs** | Validate collectives spanning multiple SUs. Exercises spine switching, inter-SU cabling, and routing tables. | ~5 min | MNT2 |
+| 12 | **NCCL AllReduce / AllToAll — All Handover Hosts** | Full-fabric collective test across all handover nodes. Confirms end-to-end network health and bisection bandwidth at production scale. Must pass before model-level tests. | ~5 min | MNT2 |
+| 13 | **Llama 3.1 403B Pre-Training — All Handover Hosts** | End-to-end pre-training across all handover nodes. Validates target MFU with no loss spikes, checkpoint corruption, or node dropouts. | ~45 min | MNT3 |
+| 14 | **Nemotron 3 — All Handover Hosts** | Nemotron 3 workload across all handover nodes. Second independent signal of system health; validates NVIDIA-specific kernels and training stack. | ~1 hr | MNT3 |
 | — | **Remediation — Failed Nodes / Components** | Hardware investigation, repair, and re-validation for any nodes quarantined during testing. Includes fault isolation, component replacement, and re-running affected tests. Duration scales with failure count, component availability, and cluster size. | 3+ days (scale-dependent) | — |
 | — | **New Product Tuning** | System-level tuning required on new hardware platforms — BIOS settings, fabric configs, driver parameters, and performance baseline calibration. Must be completed before or alongside burn-in on first-generation deployments. | 3+ days | — |
 
@@ -33,6 +34,7 @@ Tests run in execution order: initial system checks through full-scale workload 
 | Pre-Flight Checks | Yes — no downstream tests run |
 | DCGM Diagnostics (`dcgmi -r 3`) | Yes — failed nodes quarantined before burn-in |
 | NCCL Single-Node (NVLink / No NVLink) | Yes — per node |
+| NVSM Stress Test | Yes — failed nodes quarantined before burn-in |
 | MNUberGEMM Burn-In | Yes — failed nodes quarantined |
 | Intermediate NCCL + Workload Tests | Yes — failed nodes pulled; container issues fixed |
 | Network Fabric Health Check | Yes — dashboard errors or CVT failures block performance testing |
@@ -46,9 +48,9 @@ Tests run in execution order: initial system checks through full-scale workload 
 ## Notes
 
 - Tests marked *(Automated)* trigger programmatically on prerequisite completion.
-- Intermediate NCCL tests (#6) pause MNUberGEMM at burn-in checkpoints; burn-in resumes after each subset completes.
-- Network Fabric Health Check (#7) must show a clean dashboard and passing CVT (or equivalent) before rack-level NCCL tests begin.
-- Nodes failing single-node NCCL, burn-in, or intermediate NCCL are removed from the handover pool and re-queued for hardware investigation.
+- Intermediate NCCL tests (#7) pause MNUberGEMM at burn-in checkpoints; burn-in resumes after each subset completes.
+- Network Fabric Health Check (#8) must show a clean dashboard and passing CVT (or equivalent) before rack-level NCCL tests begin.
+- Nodes failing single-node NCCL, NVSM stress, burn-in, or intermediate NCCL are removed from the handover pool and re-queued for hardware investigation.
 - Duration estimates vary with cluster size, message sizes, and iteration counts configured per site.
 
 ---
@@ -63,15 +65,16 @@ Handing over individual 8-way nodes. No peer nodes available, so all inter-node 
 | 2 | DCGM Diagnostics (`dcgmi -r 3`) | SNT2 | Included |
 | 3 | NCCL Single-Node — NVLink | SNT2 | Included |
 | 4 | NCCL Single-Node — No NVLink | SNT2 | Included |
-| 5 | MNUberGEMM Burn-In | SNT3 | Included |
-| 6 | Intermediate NCCL + Workload Tests | — | **Removed** — inter-node collectives and distributed workload require peer nodes |
-| 7 | Network Fabric Health Check | MNT1 | Included — validates fabric port and link health for the node |
-| 8 | NCCL AllReduce / AllToAll — Rack | MNT2 | **Removed** — no peer nodes |
-| 9 | NCCL AllReduce / AllToAll — Scalable Unit | MNT2 | **Removed** — no peer nodes |
-| 10 | NCCL AllReduce / AllToAll — Across SUs | MNT2 | **Removed** — no peer nodes |
-| 11 | NCCL AllReduce / AllToAll — All Handover Hosts | MNT2 | **Removed** — redundant with single-node NCCL |
-| 12 | Llama 3.1 403B Pre-Training | MNT3 | **Removed** — requires multi-node distributed training |
-| 13 | Nemotron 3 | MNT3 | **Removed** — requires multi-node distributed training |
+| 5 | NVSM Stress Test | SNT1 | Included |
+| 6 | MNUberGEMM Burn-In | SNT3 | Included |
+| 7 | Intermediate NCCL + Workload Tests | — | **Removed** — inter-node collectives and distributed workload require peer nodes |
+| 8 | Network Fabric Health Check | MNT1 | Included — validates fabric port and link health for the node |
+| 9 | NCCL AllReduce / AllToAll — Rack | MNT2 | **Removed** — no peer nodes |
+| 10 | NCCL AllReduce / AllToAll — Scalable Unit | MNT2 | **Removed** — no peer nodes |
+| 11 | NCCL AllReduce / AllToAll — Across SUs | MNT2 | **Removed** — no peer nodes |
+| 12 | NCCL AllReduce / AllToAll — All Handover Hosts | MNT2 | **Removed** — redundant with single-node NCCL |
+| 13 | Llama 3.1 403B Pre-Training | MNT3 | **Removed** — requires multi-node distributed training |
+| 14 | Nemotron 3 | MNT3 | **Removed** — requires multi-node distributed training |
 
 ---
 
@@ -85,15 +88,16 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 | 2 | DCGM Diagnostics (`dcgmi -r 3`) | SNT2 | Included |
 | 3 | NCCL Single-Node — NVLink | SNT2 | Included |
 | 4 | NCCL Single-Node — No NVLink | SNT2 | Included |
-| 5 | MNUberGEMM Burn-In | SNT3 | Included |
-| 6 | Intermediate NCCL + Workload Tests | — | Included — scoped to rack nodes |
-| 7 | Network Fabric Health Check | MNT1 | Included |
-| 8 | NCCL AllReduce / AllToAll — Rack | MNT2 | Included |
-| 9 | NCCL AllReduce / AllToAll — Scalable Unit | MNT2 | **Removed** — single rack; no SU-level topology |
-| 10 | NCCL AllReduce / AllToAll — Across SUs | MNT2 | **Removed** — no cross-SU paths in a single rack |
-| 11 | NCCL AllReduce / AllToAll — All Handover Hosts | MNT2 | **Removed** — spans all nodes in the full deployment, not just this rack |
-| 12 | Llama 3.1 403B Pre-Training | MNT3 | Included — scoped to NVL72 rack |
-| 13 | Nemotron 3 | MNT3 | Included — scoped to NVL72 rack |
+| 5 | NVSM Stress Test | SNT1 | Included |
+| 6 | MNUberGEMM Burn-In | SNT3 | Included |
+| 7 | Intermediate NCCL + Workload Tests | — | Included — scoped to rack nodes |
+| 8 | Network Fabric Health Check | MNT1 | Included |
+| 9 | NCCL AllReduce / AllToAll — Rack | MNT2 | Included |
+| 10 | NCCL AllReduce / AllToAll — Scalable Unit | MNT2 | **Removed** — single rack; no SU-level topology |
+| 11 | NCCL AllReduce / AllToAll — Across SUs | MNT2 | **Removed** — no cross-SU paths in a single rack |
+| 12 | NCCL AllReduce / AllToAll — All Handover Hosts | MNT2 | **Removed** — spans all nodes in the full deployment, not just this rack |
+| 13 | Llama 3.1 403B Pre-Training | MNT3 | Included — scoped to NVL72 rack |
+| 14 | Nemotron 3 | MNT3 | Included — scoped to NVL72 rack |
 
 ---
 
@@ -118,9 +122,9 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 - [NVIS HPC SA Repository](https://gitlab-master.nvidia.com/nvis-row/hpc/-/tree/main) — scripts and documentation for provisioning and validating SuperPOD clusters: firmware, network, storage, BCM, and validation tooling
 - [GB200 NVL72 Validation MOP](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB200_MOP.md) — three-phase validation procedure for GB200 clusters
 - [GB300 / B300 Validation MOP](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB300_B300_Validation_MOP.md) — three-phase validation procedure for GB300 and B300 clusters
-- [Cable Validation Tool (CVT) MOP](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/Cable-Validation-Tool-MOP.md) — deploying and running CVT to validate Layer 1 cabling against a golden P2P topology file (referenced in test #7)
+- [Cable Validation Tool (CVT) MOP](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/Cable-Validation-Tool-MOP.md) — deploying and running CVT to validate Layer 1 cabling against a golden P2P topology file (referenced in test #8)
 - [ClusterMinder MOP](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/ClusterMinder-MOP.md) — deploying ClusterMinder for cluster-wide power, temperature, and health telemetry via Redfish BMC
-- [NVIS Observability Suite](https://gitlab-master.nvidia.com/nvis-ova/nvis-observability/-/blob/main/README.md) — GPU health (DCGM), network fabric dashboards, Slurm job telemetry, and log correlation; primary tool for fabric monitoring in test #7 and ongoing observability through handover
+- [NVIS Observability Suite](https://gitlab-master.nvidia.com/nvis-ova/nvis-observability/-/blob/main/README.md) — GPU health (DCGM), network fabric dashboards, Slurm job telemetry, and log correlation; primary tool for fabric monitoring in test #8 and ongoing observability through handover
 - [Meta CSP NCCL Tests](https://gitlab-master.nvidia.com/nvis-npi/META_CSP_NCCL_Tests/-/blob/main/Meta_CSP_NCCL_Tests.md) — NCCL test procedures and configurations used for CSP-scale validation
 - [NVIS Exemplar MOP](https://gitlab-master.nvidia.com/nvis-npi/nvis_exemplar/-/blob/main/Exemplar_MOP.md) — reference MOP for NVIS exemplar cluster validation and delivery
 - [LLM Benchmarking Collection (Internal)](https://gitlab-master.nvidia.com/unified-cloud-benchmarking/llm-benchmarking-collection-internal/-/blob/perf/26.02/exemplar.yaml) — source of the Exemplar workload definition; `exemplar.yaml` defines the LLM training benchmark configuration used in Exemplar runs (branch: `perf/26.02`)
@@ -160,9 +164,8 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 
 #### Workload naming: "Nemotron 3" vs current platform workloads
 
-- **What this plan says:** Test #13 is named "Nemotron 3 — All Handover Hosts."
+- **What this plan says:** Test #14 is named "Nemotron 3 — All Handover Hosts."
 - **What the MOPs say:**
   - [GB200 MOP §7.4](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB200_MOP.md#74-workload-testing-nemotron--nemo-via-dgx-cloud-benchmarking--phase-1) uses **Nemotron-4** 15B (via `llmb-run`, branch `release/25.08`). Nemotron-4 is a different model generation from Nemotron 3.
   - [GB300/B300 MOP §7.4](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB300_B300_Validation_MOP.md#74-workload-testing-deepseek-v3-via-dgx-cloud-benchmarking--phase-1) uses **DeepSeek-V3 671B FP8** (via `llmb-run`, branch `release/25.10.01`) — Nemotron is not the Phase 1 workload at all on GB300/B300.
-- **To resolve:** This plan may intentionally be platform-agnostic (listing Nemotron 3 as an example MNT3 workload), in which case it should say so explicitly. If it's meant to reflect current practice, test #13 should be updated to reference the platform-appropriate workload or replaced with a generic label like "Representative LLM Pre-Training Workload #2."
-
+- **To resolve:** This plan may intentionally be platform-agnostic (listing Nemotron 3 as an example MNT3 workload), in which case it should say so explicitly. If it's meant to reflect current practice, test #14 should be updated to reference the platform-appropriate workload or replaced with a generic label like "Representative LLM Pre-Training Workload #2."
