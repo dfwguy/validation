@@ -2,6 +2,8 @@
 
 Tests run in execution order: initial system checks through full-scale workload validation. Automated tests trigger without manual intervention.
 
+This document does not cover setup validity checks, customer acceptance tests, or any testing outside the scope of pre-flight, benchmarking, and burn-in.
+
 ---
 
 ## Test Execution Order — Sweet Spot / Hybrid
@@ -47,7 +49,7 @@ Tests run in execution order: initial system checks through full-scale workload 
 
 ## Notes
 
-- Tests marked *(Automated)* trigger programmatically on prerequisite completion.
+- Tests marked *(Automated)* trigger programmatically on prerequisite completion. Automated tests are implemented as scripts that run as Slurm jobs, launched via a BCM trigger; the same scripts can also be run ad-hoc outside of BCM. Pre-flight checks run before a Slurm job starts using Slurm's prolog mechanism.
 - Intermediate NCCL tests (#7) pause MNUberGEMM at burn-in checkpoints; burn-in resumes after each subset completes.
 - Network Fabric Health Check (#8) must show a clean dashboard and passing CVT (or equivalent) before rack-level NCCL tests begin.
 - Nodes failing single-node NCCL, NVSM stress, burn-in, or intermediate NCCL are removed from the handover pool and re-queued for hardware investigation.
