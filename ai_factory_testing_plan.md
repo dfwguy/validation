@@ -51,7 +51,18 @@ Tests run in execution order: initial system checks through full-scale workload 
 - Intermediate NCCL tests (#7) pause MNUberGEMM at burn-in checkpoints; burn-in resumes after each subset completes.
 - Network Fabric Health Check (#8) must show a clean dashboard and passing CVT (or equivalent) before rack-level NCCL tests begin.
 - Nodes failing single-node NCCL, NVSM stress, burn-in, or intermediate NCCL are removed from the handover pool and re-queued for hardware investigation.
+- Nodes failing any check in a Time to Market delivery undergo additional validation with a deeper observability dive — including telemetry review, per-component isolation, and targeted re-runs — until the fault is remediated or the system is RMA'd.
 - Duration estimates vary with cluster size, message sizes, and iteration counts configured per site.
+- Workload selections (tests #13–14) use the most recent available benchmarks and model versions at time of execution; specific versions are determined per platform. Plan valid as of April 22, 2026.
+
+### DCGM Diagnostic Levels
+
+DCGM diagnostic levels serve distinct roles in this plan:
+
+- **`-r 1`** (Quick, ~1 min): Pre-flight check — confirms GPUs are visible and responding before longer tests commit.
+- **`-r 3`** (Extended, ~20 min): Standard pre-burn-in diagnostic — sufficient coverage of memory, compute, and interconnect health before MNUberGEMM.
+- **`-r 4`** (Stress, ~45–90 min): Short-running burn-in substitute — exercises GPUs more aggressively than `-r 3` and serves as a lighter alternative to MNUberGEMM when schedule constraints apply (see TTM sections).
+- **`-r 2`** is not used in this plan; it does not serve a distinct role in our validation flow.
 
 ---
 
@@ -62,11 +73,11 @@ Handing over individual 8-way nodes. No peer nodes available, so all inter-node 
 | # | Test Name | Tier | Status |
 |---|-----------|------|--------|
 | 1 | Pre-Flight Checks | SNT1 | Included |
-| 2 | DCGM Diagnostics (`dcgmi -r 3`) | SNT2 | Included |
+| 2 | DCGM Diagnostics (`dcgmi -r 3` or `-r 4`) | SNT2 | Included — use `-r 4` if substituting for burn-in (step 6) |
 | 3 | NCCL Single-Node — NVLink | SNT2 | Included |
 | 4 | NCCL Single-Node — No NVLink | SNT2 | Included |
 | 5 | NVSM Stress Test | SNT2 | Included |
-| 6 | MNUberGEMM Burn-In | SNT3 | Included |
+| 6 | MNUberGEMM Burn-In | SNT3 | Optional — recommended; `dcgmi -r 4` (upgrade step 2 to `-r 4`) is a lighter substitute. Can be skipped for pure Time to Market. |
 | 7 | Intermediate NCCL + Workload Tests | — | **Removed** — inter-node collectives and distributed workload require peer nodes |
 | 8 | Network Fabric Health Check | MNT1 | Included — validates fabric port and link health for the node |
 | 9 | NCCL AllReduce / AllToAll — Rack | MNT2 | **Removed** — no peer nodes |
@@ -85,11 +96,11 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 | # | Test Name | Tier | Status |
 |---|-----------|------|--------|
 | 1 | Pre-Flight Checks | SNT1 | Included |
-| 2 | DCGM Diagnostics (`dcgmi -r 3`) | SNT2 | Included |
+| 2 | DCGM Diagnostics (`dcgmi -r 3` or `-r 4`) | SNT2 | Included — upgrade to `-r 4` if substituting for burn-in |
 | 3 | NCCL Single-Node — NVLink | SNT2 | Included |
 | 4 | NCCL Single-Node — No NVLink | SNT2 | Included |
 | 5 | NVSM Stress Test | SNT2 | Included |
-| 6 | MNUberGEMM Burn-In | SNT3 | Included |
+| 6 | MNUberGEMM Burn-In | SNT3 | Optional — recommended; `dcgmi -r 4` is a lighter alternative. Can be skipped for pure Time to Market. |
 | 7 | Intermediate NCCL + Workload Tests | — | Included — scoped to rack nodes |
 | 8 | Network Fabric Health Check | MNT1 | Included |
 | 9 | NCCL AllReduce / AllToAll — Rack | MNT2 | Included |
@@ -128,44 +139,3 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 - [Meta CSP NCCL Tests](https://gitlab-master.nvidia.com/nvis-npi/META_CSP_NCCL_Tests/-/blob/main/Meta_CSP_NCCL_Tests.md) — NCCL test procedures and configurations used for CSP-scale validation
 - [NVIS Exemplar MOP](https://gitlab-master.nvidia.com/nvis-npi/nvis_exemplar/-/blob/main/Exemplar_MOP.md) — reference MOP for NVIS exemplar cluster validation and delivery
 - [LLM Benchmarking Collection (Internal)](https://gitlab-master.nvidia.com/unified-cloud-benchmarking/llm-benchmarking-collection-internal/-/blob/perf/26.02/exemplar.yaml) — source of the Exemplar workload definition; `exemplar.yaml` defines the LLM training benchmark configuration used in Exemplar runs (branch: `perf/26.02`)
-
----
-
-## To-Do / To Reconcile
-
-### High Priority
-
-#### "Time to Market" naming collision
-
-- **What this plan says:** The "Time to Market — Single Node" and "Time to Market — Rack" sections both include MNUberGEMM Burn-In (SNT3) as **Included**.
-- **What the methodology says:** [Section 6.5 of the NVIS AI Factory Delivery Methodology](https://gitlab-master.nvidia.com/nvis-npi/clustermods-methodology/-/blob/main/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#65-time-to-market-approach) defines TTM as executing **only the shared baseline** — inventory, minimum viable inter-GPU fabric, and a representative workload. It explicitly states TTM "does not add Hybrid strategic burn-in." MNUberGEMM burn-in (SNT3) is Hybrid content per [Section 6.3.1](https://gitlab-master.nvidia.com/nvis-npi/clustermods-methodology/-/blob/main/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#631-philosophy-optimized-exhaustive).
-- **What these sections actually are:** Hybrid methodology applied at a smaller delivery scope (single node or single rack). The methodology's [Table 4](https://gitlab-master.nvidia.com/nvis-npi/clustermods-methodology/-/blob/main/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#611-two-axes) explicitly defines "Hybrid + partial/incremental handover" as a valid combination — that is what these sections describe.
-- **Options to resolve:**
-  - Rename to "Hybrid — Single Node (8-Way)" and "Hybrid — Rack (NVL72)" to match the methodology's terminology.
-  - Or keep the "Time to Market" framing but strip burn-in (SNT3) out and replace it with baseline-only tests — which would make the sections correct TTM but significantly lighter.
-
-#### Hybrid section omits Path B → Exhaustive bifurcation
-
-- **What this plan says:** The pass/fail table lists which tests hard-block on failure and notes that failing nodes are quarantined, but stops there.
-- **What the methodology says:** [Section 7.1 of the methodology](https://gitlab-master.nvidia.com/nvis-npi/clustermods-methodology/-/blob/main/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#71-hybrid-approach-execution-flow) defines Hybrid as a **two-path bifurcation**: Path A (nodes that pass) go to production; Path B (nodes/scope that fail) enter **full Exhaustive validation** — SNT1 → SNT2 → SNT3 → applicable MNT tiers, including scalability study. Replaced components also follow Exhaustive by default before rejoining the Hybrid flow.
-- **What's missing:** No mention in this plan of what happens after quarantine. A reader following this plan would not know that failed scope must run the full Exhaustive progression before re-entering.
-- **To resolve:** Add a note below the pass/fail table or in the Notes section clarifying that quarantined nodes follow the Exhaustive path per the methodology, and that component replacements default to Exhaustive re-validation before rejoining the handover pool.
-
-### Medium Priority
-
-#### DCGM diagnostic level mismatch
-
-- **What this plan says:** Test #2 specifies `dcgmi -r 3` (Level 3, the extended diagnostic, ~20 min).
-- **What the MOPs say:** Both the [GB200 MOP §7.1.1](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB200_MOP.md#711-inventory-and-bom-checks) and [GB300/B300 MOP §7.1.1](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB300_B300_Validation_MOP.md#711-inventory-and-bom-checks) run `dcgmi diag -r 2` (Level 2, the medium diagnostic).
-- **Why it matters:** Level 3 runs more tests and takes significantly longer than Level 2. If the MOPs are the execution reference, engineers on site will run Level 2 while this plan calls for Level 3 — or vice versa.
-- **To resolve:** Decide which level is the standard, update the other documents to match, and document the rationale (Level 3 for deeper pre-burn-in coverage vs. Level 2 for faster iteration).
-
-### Low Priority
-
-#### Workload naming: "Nemotron 3" vs current platform workloads
-
-- **What this plan says:** Test #14 is named "Nemotron 3 — All Handover Hosts."
-- **What the MOPs say:**
-  - [GB200 MOP §7.4](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB200_MOP.md#74-workload-testing-nemotron--nemo-via-dgx-cloud-benchmarking--phase-1) uses **Nemotron-4** 15B (via `llmb-run`, branch `release/25.08`). Nemotron-4 is a different model generation from Nemotron 3.
-  - [GB300/B300 MOP §7.4](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB300_B300_Validation_MOP.md#74-workload-testing-deepseek-v3-via-dgx-cloud-benchmarking--phase-1) uses **DeepSeek-V3 671B FP8** (via `llmb-run`, branch `release/25.10.01`) — Nemotron is not the Phase 1 workload at all on GB300/B300.
-- **To resolve:** This plan may intentionally be platform-agnostic (listing Nemotron 3 as an example MNT3 workload), in which case it should say so explicitly. If it's meant to reflect current practice, test #14 should be updated to reference the platform-appropriate workload or replaced with a generic label like "Representative LLM Pre-Training Workload #2."
