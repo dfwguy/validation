@@ -12,7 +12,7 @@ Tests run in execution order: initial system checks through full-scale workload 
 | 2 | **DCGM Diagnostics (`dcgmi -r 3`)** *(Automated)* | Run level-3 DCGM diagnostics on all nodes. Validates GPU memory, compute, and interconnect health per node before committing to long burn-in. Quarantines failing nodes early. | ~20 min | SNT2 |
 | 3 | **NCCL AllReduce / AllToAll — Single Node, NVLink** *(Automated)* | Validate intra-node GPU collective bandwidth/latency over NVLink/NVSwitch. Establishes per-node NVLink baseline. | < 5 min | SNT2 |
 | 4 | **NCCL AllReduce / AllToAll — Single Node, No NVLink** *(Automated)* | Validate intra-node GPU collectives over PCIe only. Confirms PCIe integrity; regression reference for nodes where NVLink is unavailable or degraded. | < 5 min | SNT2 |
-| 5 | **NVSM Stress Test** *(Automated)* | Run NVSM stress across all node GPUs to validate compute, memory, and thermal stability at the system level. Executed after single-node NCCL validation to catch system-level health issues before committing to extended burn-in. Quarantines failing nodes before MNUberGEMM. | ~20 min | SNT1 |
+| 5 | **NVSM Stress Test** *(Automated)* | Run NVSM stress across all node GPUs to validate compute, memory, and thermal stability at the system level. Executed after single-node NCCL validation to catch system-level health issues before committing to extended burn-in. Quarantines failing nodes before MNUberGEMM. | ~20 min | SNT2 |
 | 6 | **MNUberGEMM Burn-In** *(Automated)* | Stress-test all GPUs via max-intensity GEMM to expose thermal instability, memory errors, power delivery issues, and infant-mortality faults. | 24–72 hrs | SNT3 |
 | 7 | **Intermediate NCCL + Workload Tests** *(During Burn-In)* | MNUberGEMM is paused at burn-in checkpoints to run AllReduce/AllToAll on partial node subsets and a small-scale workload (reduced-iteration pre-training) on a node subset. Provides early signal on inter-node network functionality and confirms containers are healthy and workloads behave as expected before full-scale tests. | ~20 min/subset | — |
 | 8 | **Network Fabric Health Check** | Confirm network dashboard is green and CVT (or equivalent fabric validation tool) reports no errors. Validates fabric inventory, topology, and link health across the full scope before performance testing begins. | ~15 min | MNT1 |
@@ -65,7 +65,7 @@ Handing over individual 8-way nodes. No peer nodes available, so all inter-node 
 | 2 | DCGM Diagnostics (`dcgmi -r 3`) | SNT2 | Included |
 | 3 | NCCL Single-Node — NVLink | SNT2 | Included |
 | 4 | NCCL Single-Node — No NVLink | SNT2 | Included |
-| 5 | NVSM Stress Test | SNT1 | Included |
+| 5 | NVSM Stress Test | SNT2 | Included |
 | 6 | MNUberGEMM Burn-In | SNT3 | Included |
 | 7 | Intermediate NCCL + Workload Tests | — | **Removed** — inter-node collectives and distributed workload require peer nodes |
 | 8 | Network Fabric Health Check | MNT1 | Included — validates fabric port and link health for the node |
@@ -88,7 +88,7 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 | 2 | DCGM Diagnostics (`dcgmi -r 3`) | SNT2 | Included |
 | 3 | NCCL Single-Node — NVLink | SNT2 | Included |
 | 4 | NCCL Single-Node — No NVLink | SNT2 | Included |
-| 5 | NVSM Stress Test | SNT1 | Included |
+| 5 | NVSM Stress Test | SNT2 | Included |
 | 6 | MNUberGEMM Burn-In | SNT3 | Included |
 | 7 | Intermediate NCCL + Workload Tests | — | Included — scoped to rack nodes |
 | 8 | Network Fabric Health Check | MNT1 | Included |
