@@ -23,3 +23,7 @@
 	path = llm-benchmarking-collection-internal
 	url = ssh://git@gitlab-master.nvidia.com:12051/unified-cloud-benchmarking/llm-benchmarking-collection-internal.git
 	branch = perf/26.02
+[submodule "walmart-perf"]
+	path = walmart-perf
+	url = ssh://git@gitlab-master.nvidia.com:12051/nvis-ova/walmart-perf.git
+	branch = main
