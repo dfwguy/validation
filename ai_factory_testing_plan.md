@@ -131,15 +131,38 @@ Handing over a single NVL72 rack. Intra-rack tests and workloads run at rack sco
 
 ### High Priority
 
-- **"Time to Market" naming collision** — The two TTM sections (Single Node, Rack) include MNUberGEMM Burn-In (SNT3), which the [NVIS AI Factory Delivery Methodology](clustermods-methodology/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md) explicitly defines as Hybrid content, not TTM. The methodology's TTM runs only the shared baseline (inventory + minimum viable fabric + representative workload) with no burn-in or extra campaigns. What these sections actually describe is **Hybrid methodology scoped to a smaller delivery increment** (single node or single rack). Options: rename the sections to "Hybrid — Single Node" and "Hybrid — Rack," or add an explicit callout that these scenarios apply Hybrid methodology depth at a partial-delivery granularity.
+#### "Time to Market" naming collision
 
-- **Hybrid section omits Path B → Exhaustive bifurcation** — The methodology defines Hybrid as a bifurcation: Path A (passing nodes) goes to production; Path B (failing nodes/scope) enters full Exhaustive validation (SNT1 → SNT2 → SNT3 → MNT as required). The pass/fail table captures the gating logic but does not describe what happens to failed scope. Add a note or row clarifying that quarantined nodes follow the Exhaustive path per the methodology.
+- **What this plan says:** The "Time to Market — Single Node" and "Time to Market — Rack" sections both include MNUberGEMM Burn-In (SNT3) as **Included**.
+- **What the methodology says:** [Section 6.5 of the NVIS AI Factory Delivery Methodology](https://gitlab-master.nvidia.com/nvis-npi/clustermods-methodology/-/blob/main/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#65-time-to-market-approach) defines TTM as executing **only the shared baseline** — inventory, minimum viable inter-GPU fabric, and a representative workload. It explicitly states TTM "does not add Hybrid strategic burn-in." MNUberGEMM burn-in (SNT3) is Hybrid content per [Section 6.3.1](https://gitlab-master.nvidia.com/nvis-npi/clustermods-methodology/-/blob/main/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#631-philosophy-optimized-exhaustive).
+- **What these sections actually are:** Hybrid methodology applied at a smaller delivery scope (single node or single rack). The methodology's [Table 4](https://gitlab-master.nvidia.com/nvis-npi/clustermods-methodology/-/blob/main/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#611-two-axes) explicitly defines "Hybrid + partial/incremental handover" as a valid combination — that is what these sections describe.
+- **Options to resolve:**
+  - Rename to "Hybrid — Single Node (8-Way)" and "Hybrid — Rack (NVL72)" to match the methodology's terminology.
+  - Or keep the "Time to Market" framing but strip burn-in (SNT3) out and replace it with baseline-only tests — which would make the sections correct TTM but significantly lighter.
+
+#### Hybrid section omits Path B → Exhaustive bifurcation
+
+- **What this plan says:** The pass/fail table lists which tests hard-block on failure and notes that failing nodes are quarantined, but stops there.
+- **What the methodology says:** [Section 7.1 of the methodology](https://gitlab-master.nvidia.com/nvis-npi/clustermods-methodology/-/blob/main/output/NVIS69-DG11849001-NVIS-AI-Factory-Delivery-Methodology-Refactored-2026-03-30.md#71-hybrid-approach-execution-flow) defines Hybrid as a **two-path bifurcation**: Path A (nodes that pass) go to production; Path B (nodes/scope that fail) enter **full Exhaustive validation** — SNT1 → SNT2 → SNT3 → applicable MNT tiers, including scalability study. Replaced components also follow Exhaustive by default before rejoining the Hybrid flow.
+- **What's missing:** No mention in this plan of what happens after quarantine. A reader following this plan would not know that failed scope must run the full Exhaustive progression before re-entering.
+- **To resolve:** Add a note below the pass/fail table or in the Notes section clarifying that quarantined nodes follow the Exhaustive path per the methodology, and that component replacements default to Exhaustive re-validation before rejoining the handover pool.
 
 ### Medium Priority
 
-- **DCGM diagnostic level mismatch** — This plan specifies `dcgmi -r 3` (Level 3, ~20 min) in test #2. Both the [GB200 MOP](validation-mops/GB200_MOP.md) and [GB300/B300 MOP](validation-mops/GB300_B300_Validation_MOP.md) use `dcgmi diag -r 2` (Level 2). Decide which level is correct for this plan and align the MOPs or document the rationale for running Level 3 here.
+#### DCGM diagnostic level mismatch
+
+- **What this plan says:** Test #2 specifies `dcgmi -r 3` (Level 3, the extended diagnostic, ~20 min).
+- **What the MOPs say:** Both the [GB200 MOP §7.1.1](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB200_MOP.md#711-inventory-and-bom-checks) and [GB300/B300 MOP §7.1.1](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB300_B300_Validation_MOP.md#711-inventory-and-bom-checks) run `dcgmi diag -r 2` (Level 2, the medium diagnostic).
+- **Why it matters:** Level 3 runs more tests and takes significantly longer than Level 2. If the MOPs are the execution reference, engineers on site will run Level 2 while this plan calls for Level 3 — or vice versa.
+- **To resolve:** Decide which level is the standard, update the other documents to match, and document the rationale (Level 3 for deeper pre-burn-in coverage vs. Level 2 for faster iteration).
 
 ### Low Priority
 
-- **Workload naming: "Nemotron 3" vs "Nemotron-4"** — Test #13 lists "Nemotron 3" but the [GB200 MOP](validation-mops/GB200_MOP.md) uses Nemotron-4 (15B, via `llmb-run`), and the [GB300/B300 MOP](validation-mops/GB300_B300_Validation_MOP.md) uses DeepSeek-V3 671B FP8 as the Phase 1 workload. Confirm whether test #13 should reference Nemotron-4 (or a platform-appropriate equivalent) and update accordingly.
+#### Workload naming: "Nemotron 3" vs current platform workloads
+
+- **What this plan says:** Test #13 is named "Nemotron 3 — All Handover Hosts."
+- **What the MOPs say:**
+  - [GB200 MOP §7.4](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB200_MOP.md#74-workload-testing-nemotron--nemo-via-dgx-cloud-benchmarking--phase-1) uses **Nemotron-4** 15B (via `llmb-run`, branch `release/25.08`). Nemotron-4 is a different model generation from Nemotron 3.
+  - [GB300/B300 MOP §7.4](https://gitlab-master.nvidia.com/nvis-npi/validation-mops/-/blob/main/GB300_B300_Validation_MOP.md#74-workload-testing-deepseek-v3-via-dgx-cloud-benchmarking--phase-1) uses **DeepSeek-V3 671B FP8** (via `llmb-run`, branch `release/25.10.01`) — Nemotron is not the Phase 1 workload at all on GB300/B300.
+- **To resolve:** This plan may intentionally be platform-agnostic (listing Nemotron 3 as an example MNT3 workload), in which case it should say so explicitly. If it's meant to reflect current practice, test #13 should be updated to reference the platform-appropriate workload or replaced with a generic label like "Representative LLM Pre-Training Workload #2."
 
