@@ -57,7 +57,93 @@ flowchart TB
 
 ## 3. Diagram — Superchip component detail (PCIe, NICs, NVMe, management)
 
-One GB200/GB300 node contains **two superchips** (each a Grace CPU + 2 Blackwell GPUs), connected to each other by 6× Clinks. The diagram below shows every downstream PCIe attachment: management chain, front-end NIC, back-end CX-8 SuperNICs, and NVMe — plus the C2C links that bind each Grace to its two Blackwells. **This diagram is drawn for GB300** (CX-8 SuperNICs at 800G); a GB200 node substitutes ConnectX-7 at 400G but is otherwise the same topology.
+One node contains **two superchips** (each a Grace CPU + 2 Blackwell GPUs), connected by 6× Clinks (~150 GB/s). GB200 and GB300 share the same Grace+Blackwell+NVLink topology but differ in NIC generation, NVMe attachment point, and RDMA path to the GPU (see Section 6).
+
+### GB200 node
+
+```mermaid
+flowchart TB
+    classDef nvidia fill:#76b900,color:#fff,stroke:#5a8c00
+    classDef mgmt   fill:#1a6bb5,color:#fff,stroke:#145090
+    classDef ext    fill:#e8e8e8,color:#333,stroke:#999
+
+    subgraph SC1["Superchip 1"]
+        direction TB
+        B1L["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
+        G1["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
+        B1R["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
+        B1L <-->|"C2C"| G1
+        G1  <-->|"C2C"| B1R
+
+        PCIE1["Gen3 PCIe Switch"]:::mgmt
+        BF3a["Front-end NIC (BF3)"]:::nvidia
+        CX7_1A["CX-7"]:::nvidia
+        CX7_1B["CX-7"]:::nvidia
+        G1 -->|"x1"| PCIE1
+        G1 -->|"x16"| BF3a
+        G1 -->|"x16"| CX7_1A
+        G1 -->|"x16"| CX7_1B
+
+        USB["USB Controller"]:::mgmt
+        BMC["BMC"]:::mgmt
+        NIC1G["1G NIC"]:::mgmt
+        PCIE1 -->|"x1"| USB
+        PCIE1 -->|"x1"| BMC
+        PCIE1 -->|"x1"| NIC1G
+
+        NVME1["4x E1.s NVMe"]:::nvidia
+        BF3a -->|"4x4"| NVME1
+
+        USB30["USB3.0"]:::ext
+        BMCOOB["BMC OOB ETH"]:::ext
+        MISC["Misc/Debug Network"]:::ext
+        IBMGMT["In-band mgmt Network"]:::ext
+        FENET["Front-end Network"]:::ext
+        BE1["Back-end Network"]:::ext
+        BE2["Back-end Network"]:::ext
+        USB     --> USB30
+        BMC     --> BMCOOB
+        NIC1G   -->|"1G"| MISC
+        BF3a    -->|"200G"| IBMGMT
+        BF3a    -->|"400G"| FENET
+        CX7_1A  -->|"400G"| BE1
+        CX7_1B  -->|"400G"| BE2
+    end
+
+    subgraph SC2["Superchip 2"]
+        direction TB
+        B2L["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
+        G2["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
+        B2R["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
+        B2L <-->|"C2C"| G2
+        G2  <-->|"C2C"| B2R
+
+        M2["M.2"]:::mgmt
+        BF3b["Front-end NIC (BF3)"]:::nvidia
+        CX7_2A["CX-7"]:::nvidia
+        CX7_2B["CX-7"]:::nvidia
+        G2 -->|"x4"| M2
+        G2 -->|"x16"| BF3b
+        G2 -->|"x16"| CX7_2A
+        G2 -->|"x16"| CX7_2B
+
+        NVME2["4x E1.s NVMe"]:::nvidia
+        BF3b -->|"4x4"| NVME2
+
+        IBMGMT2["In-band mgmt Network"]:::ext
+        FENET2["Front-end Network"]:::ext
+        BE3["Back-end Network"]:::ext
+        BE4["Back-end Network"]:::ext
+        BF3b    -->|"200G"| IBMGMT2
+        BF3b    -->|"400G"| FENET2
+        CX7_2A  -->|"400G"| BE3
+        CX7_2B  -->|"400G"| BE4
+    end
+
+    G1 <-->|"6x Clinks (~150 GB/s)"| G2
+```
+
+### GB300 node
 
 ```mermaid
 flowchart TB
@@ -139,11 +225,13 @@ flowchart TB
     G1 <-->|"6x Clinks (~150 GB/s)"| G2
 ```
 
-**Key observations:**
-- Superchip 1 owns the **management chain**: Gen3 PCIe switch → USB / BMC / 1G NIC, plus the **front-end BF3 NIC** (200G in-band mgmt + 400G front-end network — port speeds shown reflect the GB300 SuperPOD configuration; both BF3 ports are 400G-capable and the actual per-port speed depends on the deployment).
-- Both superchips share the same back-end pattern: two CX-8 SuperNICs at 800G each, each also carrying 2× E1.s NVMe via PCIe.
-- Superchip 2 adds an **M.2** slot (x4) for local OS/boot storage.
-- C2C (red links in the source diagram) is strictly intra-superchip; the inter-superchip path is the 6× Clinks at the top.
+**Key observations (both generations):**
+- **Superchip 1** owns the management chain in both: Gen3 PCIe switch → USB controller / BMC / 1G NIC, plus the front-end BF3 NIC. Both BF3 ports are 400G-capable; speeds shown reflect the SuperPOD configuration and actual deployment may vary.
+- **NVMe attachment differs:** GB200 attaches 4× E1.s NVMe to the BF3 front-end NIC (4×4). GB300 attaches 2× E1.s NVMe to each CX-8 SuperNIC (2×4 per NIC).
+- **Back-end NICs:** GB200 has two CX-7s at 400G each per superchip (4 per node). GB300 has two CX-8 SuperNICs at 800G each per superchip (4 per node).
+- **RDMA path differs:** GB300/CX-8 has a direct Blackwell↔CX-8 connection (true GPUDirect RDMA). GB200/CX-7 routes via Grace (C2C → Grace crossbar → PCIe → CX-7); see Section 6.
+- **Superchip 2** adds an M.2 slot (x4) for local OS/boot storage in both generations.
+- C2C is strictly intra-superchip; the inter-superchip path is the 6× Clinks between Grace CPUs.
 
 ---
 
