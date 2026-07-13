@@ -1,6 +1,6 @@
 # NVL72 Data Flows: C2C, MNNVL, and RDMA
 
-**Scope:** How data moves inside and between GB200 / GB300 NVL72 racks across the three fabrics — NVLink-C2C (chip-to-chip), Multi-Node NVLink (MNNVL, the in-rack scale-up fabric), and RDMA (the cross-rack scale-out fabric). Framed for benchmarking (NCCL tests) and pre-training workloads.
+**Scope:** How data moves inside and between **GB200 / GB300 NVL72** racks across the three fabrics — NVLink-C2C (chip-to-chip), Multi-Node NVLink (MNNVL, the in-rack scale-up fabric), and RDMA (the cross-rack scale-out fabric). Framed for benchmarking (NCCL tests) and pre-training workloads. All performance figures and NCCL guidance are GB200/GB300 unless noted. A Vera Rubin node diagram is included in Section 3a for architectural reference only.
 
 **Audience:** HW/SW/network engineers.
 
@@ -147,6 +147,109 @@ flowchart TB
 
 ---
 
+## 3a. Vera Rubin node topology — architectural reference
+
+> **Out of scope for this document.** The diagram below is included solely to show how the next-generation platform relates to GB200/GB300 at the node level. Figures, NCCL guidance, and fabric analysis throughout are GB200/GB300 only.
+
+One Vera Rubin node = two superchips. Each superchip is one **Vera CPU** flanked by two **Rubin GPUs** connected via NVLink-C2C (same concept as Grace + Blackwell in GB200/GB300). The two Vera CPUs within the node are linked by **NV-CLINK (x8)**, the successor to the 6× Clinks used between Grace CPUs. Each Vera drives **4× ConnectX-9 (CX-9)** NICs via PCIe Gen6 x16 for the E/W (back-end / scale-out) fabric, and both Vera CPUs share a single **BF4-800G** front-end NIC for the N/S (management / front-end) network.
+
+**RDMA path on Vera Rubin:** the CX-9 NICs attach to **Vera (CPU)**, not directly to the Rubin GPUs. The RDMA data path is **Rubin GPU → NVLink-C2C → Vera CPU crossbar → PCIe Gen6 → CX-9** — the same indirect architecture as GB200/CX7, not the direct GPU↔NIC path of GB300/CX8.
+
+```mermaid
+flowchart TB
+    classDef nvidia fill:#76b900,color:#fff,stroke:#5a8c00
+    classDef mgmt   fill:#1a6bb5,color:#fff,stroke:#145090
+    classDef ext    fill:#e8e8e8,color:#333,stroke:#999
+
+    subgraph SC1["Superchip 1"]
+        direction TB
+        RL1["Rubin GPU<br/>NVLink-C2C · Gen6 x2 EP"]:::nvidia
+        V1["Vera CPU<br/>NVLink-C2C ×2 · Gen6 x2 RP ×2<br/>Gen6 x16 ×4 · Gen6 x8 (BF4)"]:::nvidia
+        RR1["Rubin GPU<br/>NVLink-C2C · Gen6 x2 EP"]:::nvidia
+        RL1 <-->|"NVLink-C2C"| V1
+        V1  <-->|"NVLink-C2C"| RR1
+
+        CX9A["CX-9"]:::nvidia
+        CX9B["CX-9"]:::nvidia
+        CX9C["CX-9"]:::nvidia
+        CX9D["CX-9"]:::nvidia
+        V1 -->|"Gen6 x16"| CX9A
+        V1 -->|"Gen6 x16"| CX9B
+        V1 -->|"Gen6 x16"| CX9C
+        V1 -->|"Gen6 x16"| CX9D
+
+        NVM1["E1.s NVMe"]:::nvidia
+        NVM2["E1.s NVMe"]:::nvidia
+        CX9A -->|"Gen6 x4"| NVM1
+        CX9C -->|"Gen6 x4"| NVM2
+
+        MGMT1["USB Bridge / BMC<br/>Utility NIC"]:::mgmt
+        V1 -->|"Gen2 x1"| MGMT1
+        OOB1["USB3.0 / 1G RJ-45"]:::ext
+        MGMT1 --> OOB1
+
+        EW1["E/W Network — 1.6T OSFP"]:::ext
+        EW2["E/W Network — 1.6T OSFP"]:::ext
+        CX9A -->|"4×200G"| EW1
+        CX9B -->|"4×200G"| EW1
+        CX9C -->|"4×200G"| EW2
+        CX9D -->|"4×200G"| EW2
+    end
+
+    subgraph SC2["Superchip 2"]
+        direction TB
+        RL2["Rubin GPU<br/>NVLink-C2C · Gen6 x2 EP"]:::nvidia
+        V2["Vera CPU<br/>NVLink-C2C ×2 · Gen6 x2 RP ×2<br/>Gen6 x16 ×4 · Gen6 x8 (BF4)"]:::nvidia
+        RR2["Rubin GPU<br/>NVLink-C2C · Gen6 x2 EP"]:::nvidia
+        RL2 <-->|"NVLink-C2C"| V2
+        V2  <-->|"NVLink-C2C"| RR2
+
+        CX9E["CX-9"]:::nvidia
+        CX9F["CX-9"]:::nvidia
+        CX9G["CX-9"]:::nvidia
+        CX9H["CX-9"]:::nvidia
+        V2 -->|"Gen6 x16"| CX9E
+        V2 -->|"Gen6 x16"| CX9F
+        V2 -->|"Gen6 x16"| CX9G
+        V2 -->|"Gen6 x16"| CX9H
+
+        NVM3["E1.s NVMe"]:::nvidia
+        NVM4["E1.s NVMe"]:::nvidia
+        CX9E -->|"Gen6 x4"| NVM3
+        CX9G -->|"Gen6 x4"| NVM4
+
+        SSD2["E1.S Boot SSD"]:::mgmt
+        V2 -->|"Gen5 x4"| SSD2
+
+        EW3["E/W Network — 1.6T OSFP"]:::ext
+        EW4["E/W Network — 1.6T OSFP"]:::ext
+        CX9E -->|"4×200G"| EW3
+        CX9F -->|"4×200G"| EW3
+        CX9G -->|"4×200G"| EW4
+        CX9H -->|"4×200G"| EW4
+    end
+
+    BF4["N/S NIC — BF4-800G<br/>(Vera + CX9)"]:::nvidia
+    V1 -->|"Gen6 x8"| BF4
+    V2 -->|"Gen6 x8"| BF4
+    NS1["N/S Network — 400G"]:::ext
+    NS2["N/S Network — 400G"]:::ext
+    BF4 --> NS1
+    BF4 --> NS2
+
+    V1 <-->|"NV-CLINK (x8)"| V2
+```
+
+**Key observations vs GB200/GB300:**
+- **RDMA path is indirect** — CX-9 connects to Vera (CPU) via Gen6 x16, same as GB200/CX7 architecture (not the direct Blackwell↔CX8 path of GB300).
+- **4× CX-9 per Vera** (8 per node) vs 2× CX-8 per Grace (4 per node in GB300); each CX-9 provides 4×200G (800G) to the E/W fabric.
+- **NV-CLINK (x8)** replaces the 6× Clinks inter-CPU link used in GB200/GB300.
+- **PCIe Gen6** throughout (vs Gen5 in GB300).
+- **BF4-800G** replaces BF3 as the front-end N/S NIC; Rubin also adds a Gen6 x2 PCIe endpoint back to Vera (not present on Blackwell).
+- Management and NVMe attachment pattern mirrors GB200/GB300 (off the CPU-side PCIe tree).
+
+---
+
 ## 4. NVLink-C2C — the CPU↔GPU path
 
 - **What it connects:** the Grace CPU to its 2 Blackwell GPUs *within one superchip*. It is **not** a GPU-to-GPU path — every transfer is mediated by the Grace CPU and terminates in LPDDR5X.
@@ -182,6 +285,7 @@ flowchart TB
 - **GPUDirect RDMA — path differs by generation:**
   - **GB300 (CX8):** the CX8 SuperNIC is **directly connected to the Blackwell GPU**, so the NIC DMAs straight to/from HBM, bypassing C2C and Grace entirely. This is true GPUDirect RDMA.
   - **GB200 (CX7):** there is no direct GPU↔NIC connection. RDMA traffic traverses **GPU → NVLink-C2C → Grace CPU crossbar → PCIe → CX7**. CX7 does not support GPUDirect RDMA on this architecture; traffic goes through the Grace crossbar rather than directly to HBM. The NIC line rate (400 Gb/s = 50 GB/s) is well below the C2C ceiling (~200 GB/s/direction), so C2C is not the bandwidth bottleneck, but the path is indirect and the latency/CPU-overhead profile differs from the GB300 direct path.
+  - **Vera Rubin (CX-9, reference):** same indirect architecture as GB200 — Rubin GPU → NVLink-C2C → Vera CPU crossbar → PCIe Gen6 → CX-9. CX-9 attaches to Vera (CPU), not directly to Rubin. See Section 3a.
 - **Rail-optimized topology:** each GPU's NIC connects to a dedicated "rail" of the spine, so same-rank GPUs across racks talk on their own leaf/spine plane — critical for clean data-parallel scaling.
 - **In-network reduction:** **SHARP** on the IB switches (CollNet in NCCL) offloads cross-rack all-reduce into the fabric, the scale-out analog of NVLS.
 - **When it comes into play:**
