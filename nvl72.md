@@ -368,7 +368,149 @@ Reference GB300 measured values (internal IPP5 run, per GPU): HBM STREAM Triad *
 
 ---
 
-## Sources
+## 13. AllReduce and AllToAll — what they do and why they differ
+
+### AllReduce in one sentence
+Every participant contributes a **same-shape tensor**; every participant receives the **element-wise sum** (or mean) of all contributions. There is no "who sends to whom" problem because the operation is symmetric: the output is the same for everyone.
+
+**Where it appears in training:**
+- **Tensor parallelism (TP):** a matrix multiply is sharded across GPUs column- or row-wise. Each GPU computes a partial output; an all-reduce sums the partial results so every GPU holds the full activation. Fires *every layer, every forward and backward pass*.
+- **Data parallelism (DP / FSDP / ZeRO):** each rank trains on a different micro-batch and accumulates local gradients. An all-reduce (or reduce-scatter + all-gather for FSDP) synchronizes gradients across ranks before the optimizer step. Fires *once per step, after the backward pass*.
+- **Sequence / context parallelism (CP):** query/key/value tensors split along the sequence dimension need to be reassembled for attention; all-gather and reduce-scatter collectives re-form the full sequence.
+
+**Why it is bandwidth-efficient on NVLink:** the ring reduce-scatter + all-gather decomposition means each GPU only ever exchanges data with its two ring neighbors. Inside a 72-GPU NVLink domain those neighbors are always NVLink peers, and NVLS (NVLink SHARP) can offload the reduction entirely into the NVSwitch — removing per-GPU round-trips. Measured all-reduce busbw on GB300 reaches **~937 GB/s**.
+
+### AllToAll in one sentence
+Every participant sends a **unique chunk** to every other participant and receives a **unique chunk** from every other participant. There is no aggregation — each destination gets different data from each source, and the full N×N exchange must complete before any GPU can proceed.
+
+**Where it appears in training:**
+- **Expert dispatch (MoE):** after routing, GPU_i sends token-chunks to whichever GPUs own each token's assigned expert. GPU_j receives a completely different set of tokens than GPU_k. This is the canonical AllToAll workload.
+- **Expert combine (MoE):** after expert compute, each GPU returns the processed tokens to their originating GPUs. Another AllToAll, same traffic pattern in the reverse direction.
+- **Sequence parallelism variants** that rearrange KV heads across ranks also use AllToAll.
+
+**Why AllToAll punishes fabric boundaries:** there is no ring/tree shortcut. Any pair (i, j) that spans a rack boundary *must* traverse RDMA, and every GPU incurs RDMA sends to all 72 GPUs in each far rack simultaneously. Busbw drops instantly to NIC rate (~50 GB/s GB200, ~100 GB/s GB300) for the cross-rack fraction. Keeping all-to-all inside the 72-GPU NVLink domain is not a soft preference — it is a hard performance requirement for MoE at scale.
+
+---
+
+## 14. Mixture of Experts — basics and the AllToAll requirement
+
+### What MoE is
+
+A standard transformer FFN applies the same feed-forward network to every token. A **Mixture of Experts (MoE)** replaces that single FFN with **N expert sub-networks** (typically N = 8 to 256) and a lightweight **router** (a small linear layer + softmax). For each token the router selects the **top-K experts** (K = 1 or 2 in most production models) that will process it. Only K/N of the experts fire per token, so FLOPs/token stays roughly constant even as total parameter count grows by ~N×.
+
+**Why it matters for NVL72:** DeepSeek-V3/R1, Mixtral, and the next generation of large production models are all MoE. Expert parallelism (EP) — where each GPU owns a subset of experts — is the dominant new parallelism dimension on these systems, and it introduces an AllToAll on every FFN layer.
+
+### The four phases of one MoE FFN layer
+
+```mermaid
+sequenceDiagram
+    participant R as Router (all GPUs)
+    participant D as Dispatch AllToAll<br/>(MNNVL)
+    participant E as Expert Compute<br/>(each GPU runs its experts)
+    participant C as Combine AllToAll<br/>(MNNVL)
+    participant O as Output (all GPUs)
+
+    R->>D: router logits → select top-K experts per token<br/>tokens split into per-expert buckets
+    D->>E: each GPU sends token-chunks to expert-owner GPUs<br/>each GPU receives tokens assigned to its experts
+    E->>C: each GPU runs its expert FFN on received tokens
+    C->>O: each GPU sends expert outputs back to originating GPUs<br/>originating GPU applies router weights → weighted sum
+```
+
+1. **Route:** the router scores each token against all N experts; top-K winners are selected. This is local compute — no communication yet.
+2. **Dispatch AllToAll:** GPU_i partitions its tokens into N buckets (one per expert owner) and performs a global AllToAll. GPU_j now holds all tokens assigned to its experts, from all GPUs.
+3. **Expert compute:** each GPU runs its local expert FFN on the received token batch. This is the compute-heavy phase — the whole point of MoE.
+4. **Combine AllToAll:** each GPU sends computed expert outputs back to the GPUs that originated those tokens. The receiving GPUs apply router gate weights and sum the K expert contributions into the final FFN output.
+
+**Communication volume per layer per GPU (rough):**  
+`(tokens_per_gpu × hidden_dim × K / N) × 2` bytes × 2 (dispatch + combine). For large models this is hundreds of GB/s of required fabric bandwidth — which is exactly why it must stay on NVLink.
+
+### Why AllReduce does not apply to MoE dispatch
+
+AllReduce works when every GPU contributes to the same output. In MoE dispatch, GPU_i's tokens go to GPU_j, GPU_k, GPU_l — not to all GPUs equally. GPU_m receives a completely different set of tokens than GPU_j. There is no common tensor to sum; the exchange is a permutation, not a reduction. AllToAll is the only collective that expresses this correctly.
+
+### Expert parallelism sizing constraint
+
+With N total experts and EP degree `ep`, each GPU owns `N / ep` experts. A popular configuration on NVL72: EP=72 (one expert per GPU, or a small multiple). The 72-GPU NVLink domain then handles the full AllToAll on NVLink at ~626 GB/s busbw. Crossing the rack boundary drops that to ~100 GB/s — a 6× penalty. **Size EP ≤ 72 and keep it inside one NVLink domain.**
+
+---
+
+## 15. C2C H2D and D2H in the training and inference loop
+
+Section 4 established the bandwidth ceiling (~211 GB/s H2D, ~193 GB/s D2H). This section explains *where* that ceiling becomes a binding constraint in practice.
+
+### One training step, annotated by fabric
+
+```mermaid
+flowchart TD
+    DL["Data loader on Grace CPU\n(LPDDR5X or NVMe → LPDDR5X)"]
+    H2D["H2D via C2C\n~211 GB/s — tokens/embeddings into HBM"]
+    FWD["Forward pass\n(HBM compute)"]
+    TP_AR["TP AllReduce\nMNNVL / NVLS ~937 GB/s"]
+    EP_D["MoE Dispatch AllToAll\nMNNVL ~626 GB/s"]
+    EXP["Expert compute\n(HBM compute)"]
+    EP_C["MoE Combine AllToAll\nMNNVL ~626 GB/s"]
+    BWD["Backward pass\n(HBM compute)"]
+    DP_AR["DP Gradient AllReduce\nRDMA + SHARP ~100 GB/s GB300"]
+    OPT["Optimizer step"]
+    OFFLOAD{"Optimizer states\nin HBM?"}
+    D2H["D2H via C2C ~193 GB/s\nparams → Grace for update"]
+    H2D2["H2D via C2C ~211 GB/s\nupdated params → HBM"]
+    CKPT["Checkpoint\nD2H → NVMe / network"]
+
+    DL --> H2D --> FWD
+    FWD --> TP_AR --> FWD
+    FWD --> EP_D --> EXP --> EP_C --> FWD
+    FWD --> BWD
+    BWD --> TP_AR
+    BWD --> DP_AR --> OPT
+    OPT --> OFFLOAD
+    OFFLOAD -->|"Yes — stays in HBM"| FWD
+    OFFLOAD -->|"No — CPU offload"| D2H --> H2D2 --> FWD
+    OPT --> CKPT
+```
+
+### C2C is on the critical path in three specific situations
+
+#### 1. Data ingestion (H2D)
+
+The Grace CPU runs the data pipeline: tokenization, shuffling, sequence packing. Staged batches live in LPDDR5X and move H2D across C2C into HBM before the forward pass. At 211 GB/s you can transfer ~211 GB of input data per second — sufficient for most sequence lengths at typical batch sizes, but a real ceiling for high-throughput inference prefill with very long contexts or for workloads that keep the pipeline CPU-bound.
+
+**What to watch:** if GPU utilization shows idle gaps between steps, profile whether the data loader is CPU-bound or C2C-bound. Overlapping H2D transfers with the backward pass (double-buffering on the Grace side) is the standard mitigation.
+
+#### 2. CPU optimizer state offload (D2H → compute → H2D)
+
+For very large models, Adam's two moment tensors (first and second moment, FP32) cost ~2× the parameter memory. A 70B-parameter model has ~560 GB of optimizer state at FP32 — far beyond a single GPU's 288 GB HBM3e. Solutions like ZeRO-3 (sharded optimizer), DeepSpeed CPU offload, or Megatron's distributed optimizer can move optimizer states to Grace LPDDR5X.
+
+At the optimizer step:
+1. Gradients (or sharded gradients) flow **D2H** to Grace — up to ~193 GB/s.
+2. The Grace CPU (or Grace GPU tensor cores in a compute-offload variant) updates the moment estimates and applies the weight update.
+3. Updated parameters flow **H2D** back to HBM — up to ~211 GB/s.
+
+This round-trip is **directly on the step-time critical path** if it is not overlapped. A 70B model with ZeRO-3 moving ~560 GB of moments over C2C at 193/211 GB/s takes **~2.7 seconds** of pure transfer time per step (before any compute). Overlap with the backward pass is essential; if the optimizer update cannot be fully hidden, C2C becomes the step-time bottleneck, not GPU compute.
+
+**Key check:** measure step time with CPU offload on vs. off. If step time grows by more than the backward pass duration, optimizer D2H/H2D is not fully overlapped.
+
+#### 3. KV-cache spill in inference (D2H / H2D)
+
+For long-context inference (e.g., 128K–1M token contexts), the KV-cache for all in-flight sequences can exhaust HBM. Systems like vLLM and TensorRT-LLM support **KV-cache offload**: spilling cold KV blocks to Grace LPDDR5X (D2H at ~193 GB/s) and reloading them on the decode step that needs them (H2D at ~211 GB/s).
+
+At ~200 GB/s/direction, reloading a 16 GB KV-cache block takes **~80 ms** — a meaningful fraction of a decode step. The correct mental model is: Grace LPDDR5X is a **slower HBM extension**, not free capacity. Use it to extend context length when HBM is the hard constraint, but size the hot/cold ratio so the reload latency stays below the acceptable decode SLA.
+
+**GB300 advantage:** 288 GB HBM3e per GPU (vs ~192 GB GB200) means KV-cache spill happens at a much higher context length before HBM pressure — spill to Grace is less often needed, so the C2C ceiling is hit less frequently.
+
+### Sizing heuristic: how much C2C budget does a step consume?
+
+| Traffic source | Direction | Rough size (70B dense, BS=1) | Time at 200 GB/s |
+|---|---|---|---|
+| Token embedding lookup (H2D) | H2D | ~KB range | negligible |
+| Activation checkpointing (store) | D2H | 1–10 GB/layer (model-dependent) | 5–50 ms/layer |
+| Optimizer state update (ZeRO-3) | D2H + H2D | ~560 GB moments | ~2.7 s round-trip |
+| KV-cache spill/reload (long ctx) | D2H + H2D | GB-scale per eviction | 10–100 ms/eviction |
+| Checkpoint save | D2H | ~140 GB params (FP16) | ~720 ms |
+
+The optimizer state row dominates training; the KV-cache row dominates inference. Both must be overlapped with compute or they set the step time floor.
+
+---
 
 **Internal (measured benchmark data — the basis for all "measured" figures above):**
 
