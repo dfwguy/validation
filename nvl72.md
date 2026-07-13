@@ -14,7 +14,7 @@
 |---|---|---|---|---|---|
 | **NVLink-C2C** | CPU ↔ GPU inside a superchip (**via the Grace CPU**) | 1 Grace + 2 Blackwell (a GB200/GB300 superchip) | 900 GB/s headline (aggregate) → **~211 GB/s H2D / ~193 GB/s D2H achievable per GPU** | Cache-coherent, unified memory | HW / driver (transparent) |
 | **MNNVL (NVLink 5 + NVSwitch)** | GPU ↔ GPU **scale-up** | **72 GPUs** = 1 NVLink domain (one rack) | **~937 GB/s all-reduce / ~632 GB/s all-to-all** (NCCL busBW, in-rack) | Load/store + P2P, non-coherent | NCCL P2P / NVLS |
-| **RDMA (IB or Ethernet)** | GPU ↔ GPU **scale-out** | Across racks → SuperPOD / cluster | GB200: **400 Gb/s (50 GB/s)** · GB300: **800 Gb/s (100 GB/s)** line rate | Message-passing, GPUDirect RDMA | NCCL NET plugin |
+| **RDMA (InfiniBand or RoCE)** | GPU ↔ GPU **scale-out** | Across racks → SuperPOD / cluster | GB200: **400 Gb/s (50 GB/s)** · GB300: **800 Gb/s (100 GB/s)** line rate | Message-passing, GPUDirect RDMA | NCCL NET transport |
 
 > **Correction / key caveat on C2C.** The oft-quoted **900 GB/s** is the *theoretical aggregate* NVLink-C2C figure for the superchip. NVLink-C2C is **not** a GPU-to-GPU fabric — it is the link from the Blackwell GPU to the **Grace CPU** (and its LPDDR5X), so all C2C traffic is CPU-mediated. Measured achievable throughput on GB300 is **~211 GB/s host→device** and **~193 GB/s device→host** per GPU — roughly **4–5× below the headline** and about **6–7× below** measured NVLink GPU-to-GPU bandwidth. Treat C2C as a moderate-bandwidth CPU path, not a high-bandwidth memory tier. *(Source: internal GB300 Performance Benchmarking, IPP5 run.)*
 
@@ -57,7 +57,7 @@ flowchart TB
 
 ## 3. Diagram — Superchip component detail (PCIe, NICs, NVMe, management)
 
-One GB200/GB300 node contains **two superchips** (each a Grace CPU + 2 Blackwell GPUs), connected to each other by 6× Clinks. The diagram below shows every downstream PCIe attachment: management chain, front-end NIC, back-end CX-8 SuperNICs, and NVMe — plus the C2C links that bind each Grace to its two Blackwells.
+One GB200/GB300 node contains **two superchips** (each a Grace CPU + 2 Blackwell GPUs), connected to each other by 6× Clinks. The diagram below shows every downstream PCIe attachment: management chain, front-end NIC, back-end CX-8 SuperNICs, and NVMe — plus the C2C links that bind each Grace to its two Blackwells. **This diagram is drawn for GB300** (CX-8 SuperNICs at 800G); a GB200 node substitutes ConnectX-7 at 400G but is otherwise the same topology.
 
 ```mermaid
 flowchart TB
@@ -67,9 +67,9 @@ flowchart TB
 
     subgraph SC1["Superchip 1"]
         direction TB
-        B1L["Blackwell\nNVLink C2C · x16 EP · NVLink"]:::nvidia
-        G1["Grace\nNVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
-        B1R["Blackwell\nNVLink C2C · x16 EP · NVLink"]:::nvidia
+        B1L["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
+        G1["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
+        B1R["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
         B1L <-->|"C2C"| G1
         G1  <-->|"C2C"| B1R
 
@@ -112,9 +112,9 @@ flowchart TB
 
     subgraph SC2["Superchip 2"]
         direction TB
-        B2L["Blackwell\nNVLink C2C · x16 EP · NVLink"]:::nvidia
-        G2["Grace\nNVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
-        B2R["Blackwell\nNVLink C2C · x16 EP · NVLink"]:::nvidia
+        B2L["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
+        G2["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
+        B2R["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
         B2L <-->|"C2C"| G2
         G2  <-->|"C2C"| B2R
 
@@ -198,7 +198,7 @@ flowchart TD
     Q{"Source and destination<br/>of the transfer?"}
     Q -->|"CPU to GPU<br/>same superchip"| C2C["NVLink-C2C<br/>~200 GB/s/dir, coherent"]
     Q -->|"GPU to GPU<br/>same rack (<=72 GPUs)"| NVL["MNNVL / NVLink 5<br/>1.8 TB/s, P2P + NVLS"]
-    Q -->|"GPU to GPU<br/>different racks"| RDMA["RDMA / SuperNIC<br/>GPUDirect RDMA + SHARP"]
+    Q -->|"GPU to GPU<br/>different racks"| RDMA["RDMA / SuperNIC<br/>GPUDirect RDMA transport<br/>+ optional SHARP/CollNet offload"]
 
     C2C --> NOTE1["Unified memory,<br/>load/store, data staging"]
     NVL --> NOTE2["TP / EP / CP collectives<br/>highest busbw"]
@@ -235,7 +235,7 @@ flowchart TB
 |---|---|---|
 | **P2P (CUMEM)** | MNNVL / NVLink | Any GPU-GPU pair inside the rack |
 | **NVLS** (NVLink SHARP) | MNNVL / NVSwitch | In-rack all-reduce / reduce-scatter / all-gather, large messages |
-| **NET + GPUDirect RDMA** | RDMA (IB/Ethernet) | Any GPU-GPU pair spanning racks |
+| **NET + GPUDirect RDMA** | RDMA (IB/RoCE) | Any GPU-GPU pair spanning racks |
 | **CollNet / SHARP** | RDMA (IB switch) | Cross-rack all-reduce offloaded into the fabric |
 | SHM / host | PCIe/host (avoid) | Fallback when P2P/NET can't be used — usually a misconfig |
 
@@ -249,7 +249,7 @@ The two collectives behave very differently as participant count grows beyond a 
 
 ### AllReduce — ring steps are always neighbor-to-neighbor
 
-A ring all-reduce decomposes into reduce-scatter followed by all-gather; each phase advances one step at a time around the ring. The critical property is that each step is **neighbor-only**: GPU_i sends to GPU_{i+1} and receives from GPU_{i-1}. Within a 72-GPU NVLink domain all those neighbors are NVLink peers. Extending the ring across racks adds exactly **two RDMA seam hops** — one at each rack boundary — regardless of how many GPUs are in the ring. NVLS further offloads the in-rack reduction into the NVSwitch, removing per-GPU round-trips entirely for that phase.
+A ring all-reduce decomposes into reduce-scatter followed by all-gather; each phase advances one step at a time around the ring. The critical property is that each step is **neighbor-only**: GPU_i sends to GPU_{i+1} and receives from GPU_{i-1}. Within a 72-GPU NVLink domain all those neighbors are NVLink peers. Extending the ring across racks adds **one RDMA seam hop per rack the ring spans** (two for the 2-rack case shown below) — regardless of how many GPUs are in the ring. NVLS further offloads the in-rack reduction into the NVSwitch, removing per-GPU round-trips entirely for that phase.
 
 Busbw consequence: in-rack all-reduce runs near NVLink line rate (**~937 GB/s** on GB300). Adding racks extends the ring over RDMA at the seam, but the NVLink segments still operate at full NVLink speed; effective busbw degradation is proportional to the fraction of ring steps that traverse RDMA.
 
@@ -261,7 +261,7 @@ flowchart LR
         G1 -->|"NVLink"| GDOT(("..."))
         GDOT -->|"NVLink"| G71(("G71"))
         G71 -.->|"NVLink close ring"| G0
-        NVS["NVSwitch / NVLS\nin-switch reduce"]
+        NVS["NVSwitch / NVLS<br/>in-switch reduce"]
         GDOT -. "NVLS offload" .-> NVS
     end
     subgraph RACK2["Rack 2 — 72-GPU NVLink domain"]
@@ -272,7 +272,7 @@ flowchart LR
     end
     G71 -->|"RDMA seam (1)"| H0
     H71 -->|"RDMA seam (2)"| G0
-    BWKEY["Ring steps = neighbor only — 2 RDMA hops at each rack boundary, all other steps on NVLink\nIn-rack busbw ~937 GB/s   Cross-rack: GB200 ~50 GB/s · GB300 ~100 GB/s"]
+    BWKEY["Ring steps = neighbor only — 2 RDMA hops at each rack boundary, all other steps on NVLink<br/>In-rack busbw ~937 GB/s   Cross-rack: GB200 ~50 GB/s · GB300 ~100 GB/s"]
     style BWKEY fill:#e8f4e8,stroke:#2a7a2a
 ```
 
@@ -280,19 +280,19 @@ flowchart LR
 
 AllToAll is a complete exchange: each GPU sends one unique chunk to each of the N-1 other GPUs. There is no ring or tree shortcut — each send is an independent, point-to-point transfer. Any pair that spans a rack boundary **must** traverse RDMA; there is no way to route cross-rack all-to-all traffic through NVLink. NVLS cannot help because NVLS offloads *reductions* (sum/max), not arbitrary data movement.
 
-Busbw consequence: the moment the all-to-all domain crosses a rack boundary, every GPU incurs RDMA sends to all 72 GPUs in the far rack. Busbw drops immediately to NIC rate — **GB200 ~50 GB/s, GB300 ~100 GB/s** — for the cross-rack fraction. This is why expert-parallel all-to-all must stay inside the 72-GPU NVLink domain (Section 10).
+Busbw consequence: the moment the all-to-all domain crosses a rack boundary, every GPU incurs RDMA sends to all 72 GPUs in the far rack. Busbw drops immediately to the NIC-limited plateau — **GB200 ~50 GB/s, GB300 ~100 GB/s** — for the cross-rack fraction. This is why expert-parallel all-to-all must stay inside the 72-GPU NVLink domain (Section 10).
 
 ```mermaid
 flowchart TB
     subgraph R1["Rack 1 — 72 GPUs"]
-        A1["GPU_i sends 1 unique chunk to each of 71 in-rack peers\nNVLink P2P — busbw ~626 GB/s"]
+        A1["GPU_i sends 1 unique chunk to each of 71 in-rack peers<br/>NVLink P2P — busbw ~626 GB/s"]
     end
     subgraph R2["Rack 2 — 72 GPUs"]
-        A2["GPU_j sends 1 unique chunk to each of 71 in-rack peers\nNVLink P2P — busbw ~626 GB/s"]
+        A2["GPU_j sends 1 unique chunk to each of 71 in-rack peers<br/>NVLink P2P — busbw ~626 GB/s"]
     end
     A1 -->|"72 x 72 = 5,184 unique P2P sends each direction"| A2
     A2 -->|"all RDMA — no ring/tree shortcut — no NVLS"| A1
-    BWKEY2["Busbw drops to NIC rate immediately when any pair crosses a rack boundary\nGB200 ~50 GB/s · GB300 ~100 GB/s — keep EP all-to-all inside the NVLink domain"]
+    BWKEY2["Busbw drops to the NIC-limited plateau immediately when any pair crosses a rack boundary<br/>GB200 ~50 GB/s · GB300 ~100 GB/s — keep EP all-to-all inside the NVLink domain"]
     style BWKEY2 fill:#fce8e8,stroke:#c00000
 ```
 
@@ -310,7 +310,7 @@ Place the highest-traffic parallelism dimensions on the fastest fabric that can 
 | **Pipeline (PP)** | P2P activations between stages | Moderate | **RDMA (cross-rack)** | Point-to-point, tolerant of lower BW |
 | **Data (DP / FSDP)** | Gradient all-reduce / reduce-scatter | High but once/step | **RDMA (cross-rack)**, SHARP-offloaded | Overlaps with compute; SHARP hides latency |
 
-**Design heuristic:** size **TP × EP × CP ≤ 72** so the heaviest collectives stay on NVLink; let **DP** and **PP** span racks over RDMA where the ~7–13× lower per-GPU bandwidth hurts least. C2C sits underneath all of this, feeding data and offloading state between Grace and Blackwell — but at only **~200 GB/s/direction**, so CPU offload (optimizer state, activation/KV spill to Grace) is a real bottleneck, not free capacity. Size offload so the per-step bytes moved over C2C stay well under that ceiling.
+**Design heuristic:** size **TP × EP × CP ≤ 72** so the heaviest collectives stay on NVLink; let **DP** and **PP** span racks over RDMA where the lower per-GPU bandwidth hurts least — roughly **9× (GB300) to 18× (GB200)** below in-rack, on an all-reduce busbw basis (937 GB/s ÷ 100/50 GB/s NIC). C2C sits underneath all of this, feeding data and offloading state between Grace and Blackwell — but at only **~200 GB/s/direction**, so CPU offload (optimizer state, activation/KV spill to Grace) is a real bottleneck, not free capacity. Size offload so the per-step bytes moved over C2C stay well under that ceiling.
 
 ```mermaid
 flowchart LR
@@ -337,7 +337,7 @@ flowchart LR
 | HBM per GPU | ~192 GB HBM3e | **288 GB HBM3e** (20.7 TB/rack) | More KV-cache / activations resident → less C2C/RDMA spill |
 | **NVLink-C2C** | 900 GB/s headline (~200 GB/s/dir achievable) | 900 GB/s headline (**211 H2D / 193 D2H measured**) | Unchanged — CPU-mediated, ~200 GB/s/dir in practice |
 | **MNNVL (NVLink 5)** | ~937 GB/s all-reduce / ~632 GB/s all-to-all (NCCL busBW) | Same | Unchanged — same in-rack scale-up |
-| **Scale-out NIC** | ConnectX-7, **400 Gb/s** per GPU | ConnectX-8 SuperNIC, **800 Gb/s** per GPU | **2× cross-rack bandwidth** → DP/PP scale-out roughly halves the NVLink:RDMA gap (18× → 9×) |
+| **Scale-out NIC** | ConnectX-7, **400 Gb/s** per GPU | ConnectX-8 SuperNIC, **800 Gb/s** per GPU | **2× cross-rack bandwidth** → DP/PP scale-out roughly halves the NVLink:RDMA gap (all-reduce busbw basis: 18× → 9×) |
 | Scale-out fabric | Quantum-2 IB / Spectrum-X | Quantum-X800 IB / Spectrum-X | Higher spine bandwidth, same rail-optimized model |
 
 **Takeaway:** the scale-up story (C2C + MNNVL) is identical across generations. The generational change is **scale-out**: GB300's ConnectX-8 doubles per-GPU RDMA bandwidth, which relaxes how tightly you must confine DP/PP and improves multi-rack collective efficiency.
@@ -350,14 +350,14 @@ flowchart LR
 |---|---|---|---|
 | `all_reduce_perf`, 2–72 GPUs, 1 rack | MNNVL (NVLS) | GB300 busbw **~934 GB/s** target (measured 937) | NVLS engaged (`NCCL_NVLS_ENABLE=1`), no NET/SHM fallback |
 | `alltoall_perf`, 1 rack | MNNVL | GB300 busbw **~626 GB/s** target (measured 632) | All pairs on P2P/NVLink |
-| P2P bandwidth test, 4-GPU node | MNNVL (NVLink) | Expect in line with NCCL all-reduce busBW **~937 GB/s** | NVLink P2P, not staged through host |
+| P2P bandwidth test, 4-GPU node | MNNVL (NVLink) | Measured NVLink P2P **~1,346 GB/s** (raw P2P, not all-reduce busbw) | NVLink P2P, not staged through host |
 | host↔device BW test | **C2C** | **~211 GB/s H2D / ~193 GB/s D2H** (not 900) | Traffic on C2C, not PCIe; `NCCL_NET_GDR_C2C=1` where relevant |
-| `all_reduce_perf`, multi-rack | RDMA (+ SHARP/CollNet) | NIC-bound: GB200 ~50 GB/s, GB300 ~100 GB/s per GPU | GPUDirect RDMA on, correct rail/HCA, CollNet if SHARP |
+| `all_reduce_perf`, multi-rack | RDMA (+ SHARP/CollNet) | Scale-out busbw plateau near single-NIC SOL: GB200 ~50 GB/s, GB300 ~100 GB/s per GPU | GPUDirect RDMA on, correct rail/HCA, CollNet if SHARP |
 | `sendrecv_perf`, cross-rack | RDMA | NIC line rate | No bounce buffers |
 
 Reference GB300 measured values (internal IPP5 run, per GPU): HBM STREAM Triad **7,389 GB/s** · C2C **211 GB/s H2D / 193 GB/s D2H** · NCCL all-reduce busBW **937 GB/s** · NCCL all-to-all busBW **632 GB/s**.
 
-**Interpreting results:** a healthy multi-rack all-reduce shows a clear two-tier profile — near-NVLink busbw (~900+ GB/s) while the message stays in-rack, dropping to NIC-limited busbw (GB300 ~100 GB/s) once it crosses racks. If in-rack numbers look NIC-limited, the topology/HCA mapping is forcing NET; if cross-rack numbers are worse than line rate, check GPUDirect RDMA, rail mapping, and congestion control. Note the correct in-rack all-reduce run uses `NCCL_NVLS_ENABLE=1 NCCL_MNNVL_ENABLE=1`; a straggler on any one of the 4 CX8 rails throttles the whole cross-rack collective.
+**Interpreting results:** a healthy multi-rack all-reduce shows a clear two-tier profile — near-NVLink busbw (~900+ GB/s) while the message stays in-rack, dropping to NIC-limited busbw (GB300 ~100 GB/s) once it crosses racks. If in-rack numbers look NIC-limited, the topology/HCA mapping is forcing NET; if cross-rack numbers are worse than the NIC's busbw plateau, check GPUDirect RDMA, rail mapping, and congestion control. For NVLink-domain testing, don't assume `NCCL_NVLS_ENABLE=1 NCCL_MNNVL_ENABLE=1` must both be forced — NCCL auto-detects the NVLink domain and selects NVLS/MNNVL accordingly (internal GB300 runs use `NCCL_MNNVL_ENABLE=1` with `NCCL_NVLS_ENABLE=0` in some cases). Verify NCCL *selected* NVLS/MNNVL as intended rather than hard-coding the pair. Separately, a straggler on any one of the 4 CX8 rails throttles the whole cross-rack collective.
 
 ---
 
@@ -381,7 +381,7 @@ Every participant sends a **unique chunk** to every other participant and receiv
 - **Expert combine (MoE):** after expert compute, each GPU returns the processed tokens to their originating GPUs. Another AllToAll, same traffic pattern in the reverse direction.
 - **Sequence parallelism variants** that rearrange KV heads across ranks also use AllToAll.
 
-**Why AllToAll punishes fabric boundaries:** there is no ring/tree shortcut. Any pair (i, j) that spans a rack boundary *must* traverse RDMA, and every GPU incurs RDMA sends to all 72 GPUs in each far rack simultaneously. Busbw drops instantly to NIC rate (~50 GB/s GB200, ~100 GB/s GB300) for the cross-rack fraction. Keeping all-to-all inside the 72-GPU NVLink domain is not a soft preference — it is a hard performance requirement for MoE at scale.
+**Why AllToAll punishes fabric boundaries:** there is no ring/tree shortcut. Any pair (i, j) that spans a rack boundary *must* traverse RDMA, and every GPU incurs RDMA sends to all 72 GPUs in each far rack simultaneously. Busbw drops instantly to the NIC-limited plateau (~50 GB/s GB200, ~100 GB/s GB300) for the cross-rack fraction. Keeping all-to-all inside the 72-GPU NVLink domain is not a soft preference — it is a hard performance requirement for MoE at scale.
 
 ---
 
@@ -389,7 +389,7 @@ Every participant sends a **unique chunk** to every other participant and receiv
 
 ### What MoE is
 
-A standard transformer FFN applies the same feed-forward network to every token. A **Mixture of Experts (MoE)** replaces that single FFN with **N expert sub-networks** (typically N = 8 to 256) and a lightweight **router** (a small linear layer + softmax). For each token the router selects the **top-K experts** (K = 1 or 2 in most production models) that will process it. Only K/N of the experts fire per token, so FLOPs/token stays roughly constant even as total parameter count grows by ~N×.
+A standard transformer FFN applies the same feed-forward network to every token. A **Mixture of Experts (MoE)** replaces that single FFN with **N expert sub-networks** (typically N = 8 to 256) and a lightweight **router** (a small linear layer + softmax). For each token the router selects the **top-K experts** (K ranges from 1–2 in older models like Mixtral up to 8 in DeepSeek-V3) that will process it. Only K/N of the experts fire per token, so FLOPs/token stays roughly constant even as total parameter count grows by ~N×.
 
 **Why it matters for NVL72:** DeepSeek-V3/R1, Mixtral, and the next generation of large production models are all MoE. Expert parallelism (EP) — where each GPU owns a subset of experts — is the dominant new parallelism dimension on these systems, and it introduces an AllToAll on every FFN layer.
 
@@ -415,7 +415,7 @@ sequenceDiagram
 4. **Combine AllToAll:** each GPU sends computed expert outputs back to the GPUs that originated those tokens. The receiving GPUs apply router gate weights and sum the K expert contributions into the final FFN output.
 
 **Communication volume per layer per GPU (rough):**  
-`(tokens_per_gpu × hidden_dim × K / N) × 2` bytes × 2 (dispatch + combine). For large models this is hundreds of GB/s of required fabric bandwidth — which is exactly why it must stay on NVLink.
+`tokens_per_gpu × hidden_dim × K × 2 bytes (FP16) × 2 (dispatch + combine)` — each token is sent to its K experts and its outputs returned; the send volume scales with K (how many experts each token hits), not 1/N. For large models this is hundreds of GB/s of required fabric bandwidth — which is exactly why it must stay on NVLink.
 
 ### Why AllReduce does not apply to MoE dispatch
 
@@ -435,20 +435,20 @@ Section 4 established the bandwidth ceiling (~211 GB/s H2D, ~193 GB/s D2H). This
 
 ```mermaid
 flowchart TD
-    DL["Data loader on Grace CPU\n(LPDDR5X or NVMe → LPDDR5X)"]
-    H2D["H2D via C2C\n~211 GB/s — tokens/embeddings into HBM"]
-    FWD["Forward pass\n(HBM compute)"]
-    TP_AR["TP AllReduce\nMNNVL / NVLS ~937 GB/s"]
-    EP_D["MoE Dispatch AllToAll\nMNNVL ~626 GB/s"]
-    EXP["Expert compute\n(HBM compute)"]
-    EP_C["MoE Combine AllToAll\nMNNVL ~626 GB/s"]
-    BWD["Backward pass\n(HBM compute)"]
-    DP_AR["DP Gradient AllReduce\nRDMA + SHARP ~100 GB/s GB300"]
+    DL["Data loader on Grace CPU<br/>(LPDDR5X or NVMe → LPDDR5X)"]
+    H2D["H2D via C2C<br/>~211 GB/s — tokens/embeddings into HBM"]
+    FWD["Forward pass<br/>(HBM compute)"]
+    TP_AR["TP AllReduce<br/>MNNVL / NVLS ~937 GB/s"]
+    EP_D["MoE Dispatch AllToAll<br/>MNNVL ~626 GB/s"]
+    EXP["Expert compute<br/>(HBM compute)"]
+    EP_C["MoE Combine AllToAll<br/>MNNVL ~626 GB/s"]
+    BWD["Backward pass<br/>(HBM compute)"]
+    DP_AR["DP Gradient AllReduce<br/>RDMA + SHARP ~100 GB/s GB300"]
     OPT["Optimizer step"]
-    OFFLOAD{"Optimizer states\nin HBM?"}
-    D2H["D2H via C2C ~193 GB/s\nparams → Grace for update"]
-    H2D2["H2D via C2C ~211 GB/s\nupdated params → HBM"]
-    CKPT["Checkpoint\nD2H → NVMe / network"]
+    OFFLOAD{"Optimizer states<br/>in HBM?"}
+    D2H["D2H via C2C ~193 GB/s<br/>params → Grace for update"]
+    H2D2["H2D via C2C ~211 GB/s<br/>updated params → HBM"]
+    CKPT["Checkpoint<br/>D2H → NVMe / network"]
 
     DL --> H2D --> FWD
     FWD --> TP_AR --> FWD
@@ -479,7 +479,7 @@ At the optimizer step:
 2. The Grace CPU (or Grace GPU tensor cores in a compute-offload variant) updates the moment estimates and applies the weight update.
 3. Updated parameters flow **H2D** back to HBM — up to ~211 GB/s.
 
-This round-trip is **directly on the step-time critical path** if it is not overlapped. A 70B model with ZeRO-3 moving ~560 GB of moments over C2C at 193/211 GB/s takes **~2.7 seconds** of pure transfer time per step (before any compute). Overlap with the backward pass is essential; if the optimizer update cannot be fully hidden, C2C becomes the step-time bottleneck, not GPU compute.
+This round-trip is **directly on the step-time critical path** if it is not overlapped. Note what actually crosses C2C: the FP32 moments (~560 GB for a 70B model) stay **resident in Grace LPDDR5X** and are updated in place by the CPU — they do *not* traverse the link each step. What crosses is **gradients D2H + updated parameters H2D** — ~280 GB for a 70B FP16 model — taking **~1.3–1.5 seconds** of pure transfer time per step (before any compute). Overlap with the backward pass is essential; if the optimizer update cannot be fully hidden, C2C becomes the step-time bottleneck, not GPU compute.
 
 **Key check:** measure step time with CPU offload on vs. off. If step time grows by more than the backward pass duration, optimizer D2H/H2D is not fully overlapped.
 
@@ -497,7 +497,7 @@ At ~200 GB/s/direction, reloading a 16 GB KV-cache block takes **~80 ms** — a 
 |---|---|---|---|
 | Token embedding lookup (H2D) | H2D | ~KB range | negligible |
 | Activation checkpointing (store) | D2H | 1–10 GB/layer (model-dependent) | 5–50 ms/layer |
-| Optimizer state update (ZeRO-3) | D2H + H2D | ~560 GB moments | ~2.7 s round-trip |
+| Optimizer state update (ZeRO-3) | D2H + H2D | ~280 GB (grad↓ + param↑; moments stay resident on Grace) | ~1.4 s round-trip |
 | KV-cache spill/reload (long ctx) | D2H + H2D | GB-scale per eviction | 10–100 ms/eviction |
 | Checkpoint save | D2H | ~140 GB params (FP16) | ~720 ms |
 
