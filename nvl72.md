@@ -140,7 +140,7 @@ flowchart TB
 ```
 
 **Key observations:**
-- Superchip 1 owns the **management chain**: Gen3 PCIe switch → USB / BMC / 1G NIC, plus the **front-end BF3 NIC** (200G in-band mgmt + 400G front-end network).
+- Superchip 1 owns the **management chain**: Gen3 PCIe switch → USB / BMC / 1G NIC, plus the **front-end BF3 NIC** (200G in-band mgmt + 400G front-end network — port speeds shown reflect the GB300 SuperPOD configuration; both BF3 ports are 400G-capable and the actual per-port speed depends on the deployment).
 - Both superchips share the same back-end pattern: two CX-8 SuperNICs at 800G each, each also carrying 2× E1.s NVMe via PCIe.
 - Superchip 2 adds an **M.2** slot (x4) for local OS/boot storage.
 - C2C (red links in the source diagram) is strictly intra-superchip; the inter-superchip path is the 6× Clinks at the top.
