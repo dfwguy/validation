@@ -1,0 +1,387 @@
+# NVL72 Data Flows: C2C, MNNVL, and RDMA
+
+**Scope:** How data moves inside and between GB200 / GB300 NVL72 racks across the three fabrics — NVLink-C2C (chip-to-chip), Multi-Node NVLink (MNNVL, the in-rack scale-up fabric), and RDMA (the cross-rack scale-out fabric). Framed for benchmarking (NCCL tests) and pre-training workloads.
+
+**Audience:** HW/SW/network engineers.
+
+> The diagrams below are [Mermaid](https://mermaid.live). They render on GitHub, in VS Code, at mermaid.live, and in Google Docs via the "Mermaid" add-on. If you paste into a plain Google Doc, paste the diagram source into mermaid.live, export PNG/SVG, and drop the image in.
+
+---
+
+## 1. The three fabrics at a glance
+
+| Fabric | Role | Scope (domain) | Per-GPU BW — theoretical vs **measured** | Coherence | Who drives it |
+|---|---|---|---|---|---|
+| **NVLink-C2C** | CPU ↔ GPU inside a superchip (**via the Grace CPU**) | 1 Grace + 2 Blackwell (a GB200/GB300 superchip) | 900 GB/s headline (aggregate) → **~211 GB/s H2D / ~193 GB/s D2H achievable per GPU** | Cache-coherent, unified memory | HW / driver (transparent) |
+| **MNNVL (NVLink 5 + NVSwitch)** | GPU ↔ GPU **scale-up** | **72 GPUs** = 1 NVLink domain (one rack) | 1,800 GB/s theoretical → **~1,346 GB/s bidir measured** (per GPU, P2P) | Load/store + P2P, non-coherent | NCCL P2P / NVLS |
+| **RDMA (IB or Ethernet)** | GPU ↔ GPU **scale-out** | Across racks → SuperPOD / cluster | GB200: **400 Gb/s (50 GB/s)** · GB300: **800 Gb/s (100 GB/s)** line rate | Message-passing, GPUDirect RDMA | NCCL NET plugin |
+
+> **Correction / key caveat on C2C.** The oft-quoted **900 GB/s** is the *theoretical aggregate* NVLink-C2C figure for the superchip. NVLink-C2C is **not** a GPU-to-GPU fabric — it is the link from the Blackwell GPU to the **Grace CPU** (and its LPDDR5X), so all C2C traffic is CPU-mediated. Measured achievable throughput on GB300 is **~211 GB/s host→device** and **~193 GB/s device→host** per GPU — roughly **4–5× below the headline** and about **6–7× below** measured NVLink GPU-to-GPU bandwidth. Treat C2C as a moderate-bandwidth CPU path, not a high-bandwidth memory tier. *(Source: internal GB300 Performance Benchmarking, IPP5 run.)*
+
+Key ratios for placement decisions, using **measured** per-GPU bandwidth:
+
+- **C2C vs NVLink:** ~200 GB/s/dir C2C vs ~1,346 GB/s bidir NVLink → NVLink is **~6–7×** the CPU path.
+- **NVLink vs RDMA (scale-up : scale-out):** ~1,346 GB/s bidir NVLink vs RDMA — GB200 (~100 GB/s bidir) → **~13×**; GB300 (~200 GB/s bidir) → **~7×**.
+
+These gaps — and specifically the modest C2C ceiling — are the single most important facts for mapping parallelism and offload strategies onto the fabrics (Section 10).
+
+---
+
+## 2. Diagram 1 — Topology: one NVL72 rack + scale-out
+
+Shows all three fabrics in one picture: **C2C** inside each superchip, **MNNVL** binding all 72 GPUs through the NVSwitch backplane, and **RDMA** leaving the rack through per-GPU SuperNICs to the spine.
+
+```mermaid
+flowchart TB
+    subgraph RACK["NVL72 Rack - single NVLink domain (72 GPUs)"]
+        direction TB
+        subgraph TRAY["Compute tray x18 - 2 superchips each"]
+            direction LR
+            subgraph SC1["GB200/GB300 Superchip"]
+                G1["Grace CPU<br/>LPDDR5X"]
+                B1["Blackwell GPU<br/>HBM3e"]
+                B2["Blackwell GPU<br/>HBM3e"]
+                G1 -- "C2C ~211/193 GB/s<br/>coherent, CPU-mediated" --> B1
+                G1 -- "C2C ~211/193 GB/s<br/>coherent, CPU-mediated" --> B2
+            end
+        end
+        NVS["NVSwitch backplane<br/>9 switch trays / 18 NVSwitch ASICs<br/>130 TB/s aggregate"]
+        B1 -- "NVLink5 1.8 TB/s" --> NVS
+        B2 -- "NVLink5 1.8 TB/s" --> NVS
+    end
+
+    SPINE["Quantum IB / Spectrum-X spine<br/>rail-optimized"]
+    OTHER["Other racks<br/>SuperPOD / cluster"]
+
+    B1 -. "RDMA via SuperNIC<br/>GB200 400G / GB300 800G" .-> SPINE
+    B2 -. "RDMA via SuperNIC<br/>GB200 400G / GB300 800G" .-> SPINE
+    SPINE -. "to other NVL72 racks" .-> OTHER
+```
+
+**Read it as three concentric scopes:** intra-superchip (C2C) ⊂ intra-rack (MNNVL) ⊂ inter-rack (RDMA).
+
+---
+
+## 3. Diagram — Superchip component detail (PCIe, NICs, NVMe, management)
+
+One GB200/GB300 node contains **two superchips** (each a Grace CPU + 2 Blackwell GPUs), connected to each other by 6× Clinks. The diagram below shows every downstream PCIe attachment: management chain, front-end NIC, back-end CX-8 SuperNICs, and NVMe — plus the C2C links that bind each Grace to its two Blackwells.
+
+```mermaid
+flowchart TB
+    classDef nvidia fill:#76b900,color:#fff,stroke:#5a8c00
+    classDef mgmt   fill:#1a6bb5,color:#fff,stroke:#145090
+    classDef ext    fill:#e8e8e8,color:#333,stroke:#999
+
+    subgraph SC1["Superchip 1"]
+        direction TB
+        B1L["Blackwell\nNVLink C2C · x16 EP · NVLink"]:::nvidia
+        G1["Grace\nNVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
+        B1R["Blackwell\nNVLink C2C · x16 EP · NVLink"]:::nvidia
+        B1L <-->|"C2C"| G1
+        G1  <-->|"C2C"| B1R
+
+        PCIE1["Gen3 PCIe Switch"]:::mgmt
+        BF3["Front-end NIC (BF3)"]:::nvidia
+        CX8_1A["CX-8"]:::nvidia
+        CX8_1B["CX-8"]:::nvidia
+        G1 -->|"x1"| PCIE1
+        G1 -->|"x16 / x16"| BF3
+        G1 -->|"x16 · x1 · x16"| CX8_1A
+        G1 -->|"x16 · x1 · x16"| CX8_1B
+
+        USB["USB Controller"]:::mgmt
+        BMC["BMC"]:::mgmt
+        NIC1G["1G NIC"]:::mgmt
+        PCIE1 -->|"x1"| USB
+        PCIE1 -->|"x1"| BMC
+        PCIE1 -->|"x1"| NIC1G
+
+        NVME1A["2x E1.s NVMe"]:::nvidia
+        NVME1B["2x E1.s NVMe"]:::nvidia
+        CX8_1A -->|"2x4"| NVME1A
+        CX8_1B -->|"2x4"| NVME1B
+
+        USB30["USB3.0"]:::ext
+        BMCOOB["BMC OOB ETH"]:::ext
+        MISC["Misc/Debug Network"]:::ext
+        IBMGMT["In-band mgmt Network"]:::ext
+        FENET["Front-end Network"]:::ext
+        BE1["Back-end Network"]:::ext
+        BE2["Back-end Network"]:::ext
+        USB    --> USB30
+        BMC    --> BMCOOB
+        NIC1G  -->|"1G"| MISC
+        BF3    -->|"200G"| IBMGMT
+        BF3    -->|"400G"| FENET
+        CX8_1A -->|"800G"| BE1
+        CX8_1B -->|"800G"| BE2
+    end
+
+    subgraph SC2["Superchip 2"]
+        direction TB
+        B2L["Blackwell\nNVLink C2C · x16 EP · NVLink"]:::nvidia
+        G2["Grace\nNVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
+        B2R["Blackwell\nNVLink C2C · x16 EP · NVLink"]:::nvidia
+        B2L <-->|"C2C"| G2
+        G2  <-->|"C2C"| B2R
+
+        M2["M.2"]:::mgmt
+        CX8_2A["CX-8"]:::nvidia
+        CX8_2B["CX-8"]:::nvidia
+        G2 -->|"x4"| M2
+        G2 -->|"x16 · x1 · x16"| CX8_2A
+        G2 -->|"x16 · x1 · x16"| CX8_2B
+
+        NVME2A["2x E1.s NVMe"]:::nvidia
+        NVME2B["2x E1.s NVMe"]:::nvidia
+        CX8_2A -->|"2x4"| NVME2A
+        CX8_2B -->|"2x4"| NVME2B
+
+        BE3["Back-end Network"]:::ext
+        BE4["Back-end Network"]:::ext
+        CX8_2A -->|"800G"| BE3
+        CX8_2B -->|"800G"| BE4
+    end
+
+    G1 <-->|"6x Clinks (~150 GB/s)"| G2
+```
+
+**Key observations:**
+- Superchip 1 owns the **management chain**: Gen3 PCIe switch → USB / BMC / 1G NIC, plus the **front-end BF3 NIC** (200G in-band mgmt + 400G front-end network).
+- Both superchips share the same back-end pattern: two CX-8 SuperNICs at 800G each, each also carrying 2× E1.s NVMe via PCIe.
+- Superchip 2 adds an **M.2** slot (x4) for local OS/boot storage.
+- C2C (red links in the source diagram) is strictly intra-superchip; the inter-superchip path is the 6× Clinks at the top.
+
+---
+
+## 4. NVLink-C2C — the CPU↔GPU path
+
+- **What it connects:** the Grace CPU to its 2 Blackwell GPUs *within one superchip*. It is **not** a GPU-to-GPU path — every transfer is mediated by the Grace CPU and terminates in LPDDR5X.
+- **Bandwidth (the important correction):** the **900 GB/s** headline is a *theoretical aggregate*. Real achievable per-GPU throughput, measured on GB300, is **~211 GB/s host→device** and **~193 GB/s device→host** — roughly 4–5× below the headline. It is still faster than PCIe Gen5 x16 (~64 GB/s bidirectional), but it is an order of magnitude slower than the NVLink GPU-to-GPU fabric, so **do not treat Grace LPDDR5X as a fast memory tier** the way HBM or NVLink peers behave.
+- **Coherence:** hardware cache-coherent. CPU and GPU share a single address space (unified memory); either side can reference the other's memory with load/store semantics, no explicit copy required — but bandwidth is capped by the ~200 GB/s/direction C2C ceiling above.
+- **When it comes into play:**
+  - Staging/prefetch of training data, optimizer state, and parameters from Grace LPDDR5X into HBM3e.
+  - CPU-side offload (e.g., optimizer states, activations, KV-cache spill) where HBM capacity is the constraint — **but this is bandwidth-limited by C2C**; offloading hot state to Grace can bottleneck a step at ~200 GB/s, not 900.
+  - Any `cudaMemcpy`/UVM traffic between host and device — rides C2C, not PCIe.
+- **Benchmarking note:** C2C does **not** appear in a GPU-to-GPU NCCL bus-bandwidth number. Measure it separately (host↔device bandwidth tests, or unified-memory microbenchmarks). GB300 reference points: **211 GB/s H2D, 193 GB/s D2H** per GPU. If a data-loader or offload path is bottlenecked, this ~200 GB/s/direction ceiling is the thing to check — not the 900 headline.
+
+---
+
+## 5. MNNVL — the in-rack scale-up fabric
+
+- **What it connects:** all **72 GPUs** in the rack into **one flat NVLink domain** via the NVSwitch backplane. Any GPU reaches any other GPU at full NVLink bandwidth in one switch hop.
+- **Bandwidth:** 1,800 GB/s per GPU theoretical (18 NVLink 5 links × 100 GB/s each); **130 TB/s** aggregate all-to-all across the rack. Measured GB300 P2P is **~1,346 GB/s bidirectional per GPU** (SM read), rising to ~1,527–1,543 GB/s with copy-engine read/write — i.e. real NVLink is ~75–85% of the headline and still ~6–7× the C2C path.
+- **Topology:** 9 NVSwitch trays, 18 NVSwitch ASICs, copper backplane; each GPU has one link to each in-rack switch plane.
+- **Semantics:** direct GPU load/store and P2P copy across the domain; **not** cache-coherent like C2C, but far higher bandwidth and lower latency than RDMA. Supports **NVLink SHARP (NVLS)** — in-network reduction executed in the NVSwitch, which offloads collectives (all-reduce, reduce-scatter, all-gather) from the GPUs.
+- **When it comes into play:**
+  - The bandwidth-hungry collectives of a pre-training step: tensor-parallel (TP) all-reduce/all-gather, expert-parallel (EP) all-to-all, sequence/context-parallel exchanges.
+  - Any parallelism dimension you want to keep *inside* the 72-GPU domain because it exchanges the most bytes per step.
+- **Benchmarking note:** In-rack NCCL collectives should ride NVLink/NVLS and report the highest busbw you'll see. Confirm NVLS is engaged (`NCCL_NVLS_ENABLE=1`, and NCCL ≥ the version that supports Blackwell NVLS) and that no unexpected hop is falling back to net.
+
+---
+
+## 6. RDMA — the cross-rack scale-out fabric
+
+- **What it connects:** GPUs in *different* racks, extending communication beyond the 72-GPU NVLink domain into a SuperPOD/cluster.
+- **NIC / bandwidth per GPU:**
+  - **GB200:** ConnectX-7, **400 Gb/s (NDR)** per GPU — Quantum-2 InfiniBand or Spectrum-X Ethernet.
+  - **GB300:** ConnectX-8 SuperNIC, **800 Gb/s** per GPU — Quantum-X800 InfiniBand or Spectrum-X.
+- **GPUDirect RDMA:** the NIC DMAs **directly to/from GPU HBM**, bypassing the CPU and system memory. This is what keeps scale-out latency and CPU overhead low.
+- **Rail-optimized topology:** each GPU's NIC connects to a dedicated "rail" of the spine, so same-rank GPUs across racks talk on their own leaf/spine plane — critical for clean data-parallel scaling.
+- **In-network reduction:** **SHARP** on the IB switches (CollNet in NCCL) offloads cross-rack all-reduce into the fabric, the scale-out analog of NVLS.
+- **When it comes into play:**
+  - Communication that must cross the rack boundary: data-parallel (DP) gradient all-reduce and pipeline-parallel (PP) point-to-point sends between racks.
+  - Any collective whose participants span more than 72 GPUs.
+- **Benchmarking note:** Cross-rack busbw is capped by the NIC line rate, not NVLink — expect roughly an order of magnitude below in-rack numbers. Watch for GPUDirect RDMA actually being used (no bounce buffers), correct rail/HCA mapping, and adaptive routing/congestion control on the fabric.
+
+---
+
+## 7. Diagram 2 — Which fabric for which hop
+
+The decision the hardware/NCCL makes for any given source→destination pair.
+
+```mermaid
+flowchart TD
+    Q{"Source and destination<br/>of the transfer?"}
+    Q -->|"CPU to GPU<br/>same superchip"| C2C["NVLink-C2C<br/>~200 GB/s/dir, coherent"]
+    Q -->|"GPU to GPU<br/>same rack (<=72 GPUs)"| NVL["MNNVL / NVLink 5<br/>1.8 TB/s, P2P + NVLS"]
+    Q -->|"GPU to GPU<br/>different racks"| RDMA["RDMA / SuperNIC<br/>GPUDirect RDMA + SHARP"]
+
+    C2C --> NOTE1["Unified memory,<br/>load/store, data staging"]
+    NVL --> NOTE2["TP / EP / CP collectives<br/>highest busbw"]
+    RDMA --> NOTE3["DP / PP across racks<br/>NIC-limited busbw"]
+```
+
+**Rule of thumb:** stay on the fastest fabric the transfer's scope allows. C2C for CPU↔GPU, NVLink for anything inside 72 GPUs, RDMA only when you must leave the rack.
+
+---
+
+## 8. Diagram 3 — How NCCL selects the transport
+
+NCCL picks the fastest transport **per rank-pair, per collective, per channel**, based on the discovered topology and message size. This is what actually determines which fabric a benchmark exercises.
+
+```mermaid
+flowchart TB
+    START["NCCL collective<br/>e.g. AllReduce"] --> TOPO["Topology discovery:<br/>same superchip? same rack? different rack?"]
+    TOPO --> P2P{"Peers reachable<br/>over NVLink?"}
+    P2P -->|"Yes, same rack"| TNVL["Transport: P2P over NVLink"]
+    P2P -->|"No, cross-rack"| TNET["Transport: NET (IB/RoCE)<br/>GPUDirect RDMA"]
+
+    TNVL --> ALGO1{"Collective + size<br/>favor NVLS?"}
+    ALGO1 -->|"Yes"| NVLS["NVLS - NVLink SHARP<br/>in-switch reduction"]
+    ALGO1 -->|"No"| RING1["Ring / Tree over NVLink"]
+
+    TNET --> ALGO2{"SHARP-enabled<br/>IB switches?"}
+    ALGO2 -->|"Yes"| COLLNET["CollNet / SHARP<br/>in-network reduction"]
+    ALGO2 -->|"No"| RING2["Ring / Tree over NET"]
+```
+
+### NCCL transport ↔ fabric mapping
+
+| NCCL transport / algo | Fabric used | Typical use |
+|---|---|---|
+| **P2P (CUMEM)** | MNNVL / NVLink | Any GPU-GPU pair inside the rack |
+| **NVLS** (NVLink SHARP) | MNNVL / NVSwitch | In-rack all-reduce / reduce-scatter / all-gather, large messages |
+| **NET + GPUDirect RDMA** | RDMA (IB/Ethernet) | Any GPU-GPU pair spanning racks |
+| **CollNet / SHARP** | RDMA (IB switch) | Cross-rack all-reduce offloaded into the fabric |
+| SHM / host | PCIe/host (avoid) | Fallback when P2P/NET can't be used — usually a misconfig |
+
+**Levers that decide the path:** `NCCL_NVLS_ENABLE`, `NCCL_COLLNET_ENABLE`, `NCCL_IB_HCA` (rail/HCA mapping), `NCCL_P2P_LEVEL`, `NCCL_ALGO`/`NCCL_PROTO`. If an in-rack test drops to `NET` or `SHM`, the topology file or HCA mapping is wrong.
+
+---
+
+## 9. AllReduce vs AllToAll — collective behavior on the fabrics
+
+The two collectives behave very differently as participant count grows beyond a single rack.
+
+### AllReduce — ring steps are always neighbor-to-neighbor
+
+A ring all-reduce decomposes into reduce-scatter followed by all-gather; each phase advances one step at a time around the ring. The critical property is that each step is **neighbor-only**: GPU_i sends to GPU_{i+1} and receives from GPU_{i-1}. Within a 72-GPU NVLink domain all those neighbors are NVLink peers. Extending the ring across racks adds exactly **two RDMA seam hops** — one at each rack boundary — regardless of how many GPUs are in the ring. NVLS further offloads the in-rack reduction into the NVSwitch, removing per-GPU round-trips entirely for that phase.
+
+Busbw consequence: in-rack all-reduce runs near NVLink line rate (**~937 GB/s** on GB300). Adding racks extends the ring over RDMA at the seam, but the NVLink segments still operate at full NVLink speed; effective busbw degradation is proportional to the fraction of ring steps that traverse RDMA.
+
+```mermaid
+flowchart LR
+    subgraph RACK1["Rack 1 — 72-GPU NVLink domain"]
+        direction LR
+        G0(("G0")) -->|"NVLink ~1.8 TB/s"| G1(("G1"))
+        G1 -->|"NVLink"| GDOT(("..."))
+        GDOT -->|"NVLink"| G71(("G71"))
+        G71 -.->|"NVLink close ring"| G0
+        NVS["NVSwitch / NVLS\nin-switch reduce"]
+        GDOT -. "NVLS offload" .-> NVS
+    end
+    subgraph RACK2["Rack 2 — 72-GPU NVLink domain"]
+        direction LR
+        H0(("H0")) -->|"NVLink"| HDOT(("..."))
+        HDOT -->|"NVLink"| H71(("H71"))
+        H71 -.->|"NVLink close ring"| H0
+    end
+    G71 -->|"RDMA seam (1)"| H0
+    H71 -->|"RDMA seam (2)"| G0
+    BWKEY["Ring steps = neighbor only — 2 RDMA hops at each rack boundary, all other steps on NVLink\nIn-rack busbw ~937 GB/s   Cross-rack: GB200 ~50 GB/s · GB300 ~100 GB/s"]
+    style BWKEY fill:#e8f4e8,stroke:#2a7a2a
+```
+
+### AllToAll — every rank sends a unique chunk to every other rank (pure P2P)
+
+AllToAll is a complete exchange: each GPU sends one unique chunk to each of the N-1 other GPUs. There is no ring or tree shortcut — each send is an independent, point-to-point transfer. Any pair that spans a rack boundary **must** traverse RDMA; there is no way to route cross-rack all-to-all traffic through NVLink. NVLS cannot help because NVLS offloads *reductions* (sum/max), not arbitrary data movement.
+
+Busbw consequence: the moment the all-to-all domain crosses a rack boundary, every GPU incurs RDMA sends to all 72 GPUs in the far rack. Busbw drops immediately to NIC rate — **GB200 ~50 GB/s, GB300 ~100 GB/s** — for the cross-rack fraction. This is why expert-parallel all-to-all must stay inside the 72-GPU NVLink domain (Section 10).
+
+```mermaid
+flowchart TB
+    subgraph R1["Rack 1 — 72 GPUs"]
+        A1["GPU_i sends 1 unique chunk to each of 71 in-rack peers\nNVLink P2P — busbw ~626 GB/s"]
+    end
+    subgraph R2["Rack 2 — 72 GPUs"]
+        A2["GPU_j sends 1 unique chunk to each of 71 in-rack peers\nNVLink P2P — busbw ~626 GB/s"]
+    end
+    A1 -->|"72 x 72 = 5,184 unique P2P sends each direction"| A2
+    A2 -->|"all RDMA — no ring/tree shortcut — no NVLS"| A1
+    BWKEY2["Busbw drops to NIC rate immediately when any pair crosses a rack boundary\nGB200 ~50 GB/s · GB300 ~100 GB/s — keep EP all-to-all inside the NVLink domain"]
+    style BWKEY2 fill:#fce8e8,stroke:#c00000
+```
+
+---
+
+## 10. Mapping fabrics to pre-training parallelism
+
+Place the highest-traffic parallelism dimensions on the fastest fabric that can contain them. The general layout on NVL72:
+
+| Parallelism | Traffic pattern | Bytes/step | Preferred fabric | Why |
+|---|---|---|---|---|
+| **Tensor (TP)** | All-reduce / all-gather every layer | Very high | **MNNVL (in-rack)** | Most bandwidth-sensitive; keep inside 72-GPU domain |
+| **Expert (EP)** | All-to-all (MoE dispatch/combine) | Very high, bursty | **MNNVL (in-rack)** | All-to-all punishes slow links; needs NVLink |
+| **Context / Sequence (CP)** | P2P / all-gather of K,V | High | **MNNVL (in-rack)** | Latency-sensitive, large tensors |
+| **Pipeline (PP)** | P2P activations between stages | Moderate | **RDMA (cross-rack)** | Point-to-point, tolerant of lower BW |
+| **Data (DP / FSDP)** | Gradient all-reduce / reduce-scatter | High but once/step | **RDMA (cross-rack)**, SHARP-offloaded | Overlaps with compute; SHARP hides latency |
+
+**Design heuristic:** size **TP × EP × CP ≤ 72** so the heaviest collectives stay on NVLink; let **DP** and **PP** span racks over RDMA where the ~7–13× lower per-GPU bandwidth hurts least. C2C sits underneath all of this, feeding data and offloading state between Grace and Blackwell — but at only **~200 GB/s/direction**, so CPU offload (optimizer state, activation/KV spill to Grace) is a real bottleneck, not free capacity. Size offload so the per-step bytes moved over C2C stay well under that ceiling.
+
+```mermaid
+flowchart LR
+    subgraph SU["Inside a rack - MNNVL (NVLink)"]
+        TP["Tensor Parallel<br/>all-reduce"]
+        EP["Expert Parallel<br/>all-to-all"]
+        CP["Context Parallel<br/>K/V exchange"]
+    end
+    subgraph SO["Across racks - RDMA"]
+        DP["Data Parallel<br/>gradient all-reduce (SHARP)"]
+        PP["Pipeline Parallel<br/>activation P2P"]
+    end
+    GRACE["Grace CPU (LPDDR5X)"] -- "C2C ~200 GB/s/dir<br/>data + state offload (limited)" --> SU
+    SU -- "rack boundary" --> SO
+```
+
+---
+
+## 11. GB200 vs GB300 — what changes for data flows
+
+| Attribute | GB200 NVL72 | GB300 NVL72 | Impact on data paths |
+|---|---|---|---|
+| GPU | Blackwell (B200-class) | Blackwell Ultra (B300) | More FP4/FP8 compute → higher demand on all fabrics |
+| HBM per GPU | ~192 GB HBM3e | **288 GB HBM3e** (20.7 TB/rack) | More KV-cache / activations resident → less C2C/RDMA spill |
+| **NVLink-C2C** | 900 GB/s headline (~200 GB/s/dir achievable) | 900 GB/s headline (**211 H2D / 193 D2H measured**) | Unchanged — CPU-mediated, ~200 GB/s/dir in practice |
+| **MNNVL (NVLink 5)** | 1.8 TB/s per GPU, 130 TB/s | 1.8 TB/s per GPU, 130 TB/s | Unchanged — same in-rack scale-up |
+| **Scale-out NIC** | ConnectX-7, **400 Gb/s** per GPU | ConnectX-8 SuperNIC, **800 Gb/s** per GPU | **2× cross-rack bandwidth** → DP/PP scale-out roughly halves the NVLink:RDMA gap (18× → 9×) |
+| Scale-out fabric | Quantum-2 IB / Spectrum-X | Quantum-X800 IB / Spectrum-X | Higher spine bandwidth, same rail-optimized model |
+
+**Takeaway:** the scale-up story (C2C + MNNVL) is identical across generations. The generational change is **scale-out**: GB300's ConnectX-8 doubles per-GPU RDMA bandwidth, which relaxes how tightly you must confine DP/PP and improves multi-rack collective efficiency.
+
+---
+
+## 12. Benchmarking cheat-sheet (NCCL)
+
+| Test / scope | Fabric exercised | Reference ceiling | What to confirm |
+|---|---|---|---|
+| `all_reduce_perf`, 2–72 GPUs, 1 rack | MNNVL (NVLS) | GB300 busbw **~934 GB/s** target (measured 937) | NVLS engaged (`NCCL_NVLS_ENABLE=1`), no NET/SHM fallback |
+| `alltoall_perf`, 1 rack | MNNVL | GB300 busbw **~626 GB/s** target (measured 632) | All pairs on P2P/NVLink |
+| P2P bandwidth test, 4-GPU node | MNNVL (NVLink) | **~1,346 GB/s** bidir/GPU (up to ~1,543 CE) | NVLink P2P, not staged through host |
+| host↔device BW test | **C2C** | **~211 GB/s H2D / ~193 GB/s D2H** (not 900) | Traffic on C2C, not PCIe; `NCCL_NET_GDR_C2C=1` where relevant |
+| `all_reduce_perf`, multi-rack | RDMA (+ SHARP/CollNet) | NIC-bound: GB200 ~50 GB/s, GB300 ~100 GB/s per GPU | GPUDirect RDMA on, correct rail/HCA, CollNet if SHARP |
+| `sendrecv_perf`, cross-rack | RDMA | NIC line rate | No bounce buffers |
+
+Reference GB300 measured values (internal IPP5 run, per GPU): HBM STREAM Triad **7,389 GB/s** · C2C **211 / 193 GB/s** (H2D/D2H) · NVLink P2P **~1,346 GB/s** bidir · NCCL all-reduce busbw **937 GB/s** · NCCL all-to-all busbw **632 GB/s**.
+
+**Interpreting results:** a healthy multi-rack all-reduce shows a clear two-tier profile — near-NVLink busbw (~900+ GB/s) while the message stays in-rack, dropping to NIC-limited busbw (GB300 ~100 GB/s) once it crosses racks. If in-rack numbers look NIC-limited, the topology/HCA mapping is forcing NET; if cross-rack numbers are worse than line rate, check GPUDirect RDMA, rail mapping, and congestion control. Note the correct in-rack all-reduce run uses `NCCL_NVLS_ENABLE=1 NCCL_MNNVL_ENABLE=1`; a straggler on any one of the 4 CX8 rails throttles the whole cross-rack collective.
+
+---
+
+## Sources
+
+**Internal (measured benchmark data — the basis for all "measured" figures above):**
+
+- [GB300 Performance Benchmarking — Confluence (space 3P, page 2075773370)](https://nvidia.atlassian.net/wiki/spaces/3P/pages/2075773370/GB300+Performance+Benchmarking) — IPP5 run: C2C 211/193 GB/s, NVLink P2P ~1,346 GB/s, NCCL all-reduce 937 GB/s, all-to-all 632 GB/s, STREAM Triad 7,389 GB/s.
+- [NCCL Collective Behavior and Performance GB300 v4 — Google Drive](https://drive.google.com/file/d/1pbf0_x67wIK7MqkKRIamLQjq4OyoARd0/view) — rail-optimized NCCL path behavior; ~900 GB/s NVLink vs ~100 GB/s NIC bus-bandwidth constants.
+
+**Public (architecture and theoretical specs):**
+
+- [GB200 NVL72 — NVIDIA](https://www.nvidia.com/en-us/data-center/gb200-nvl72/)
+- [GB300 NVL72 — NVIDIA](https://www.nvidia.com/en-us/data-center/gb300-nvl72/)
+- [NVIDIA GB200 NVL72 Delivers Trillion-Parameter LLM Training and Real-Time Inference — NVIDIA Technical Blog](https://developer.nvidia.com/blog/nvidia-gb200-nvl72-delivers-trillion-parameter-llm-training-and-real-time-inference/)
+- [System Hardware & Components — NVIDIA NVL72 AI Factory (docs.nvidia.com)](https://docs.nvidia.com/enterprise-reference-architectures/nvl72-ai-factory/latest/components.html)
+- [NVIDIA GB200 NVL Multi-Node Tuning Guide — NCCL (docs.nvidia.com)](https://docs.nvidia.com/multi-node-nvlink-systems/multi-node-tuning-guide/nccl.html)
+- [Enabling Fast Inference and Resilient Training with NCCL 2.27 — NVIDIA Technical Blog](https://developer.nvidia.com/blog/enabling-fast-inference-and-resilient-training-with-nccl-2-27/)
+- [DGX SuperPOD Reference Architecture for GB200 (docs.nvidia.com)](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-gb200/latest/)
+- [About GB200 and GB300 NVL72-powered instances — CoreWeave Docs](https://docs.coreweave.com/platform/instances/nvl72)
