@@ -179,7 +179,7 @@ flowchart TB
 - **NIC / bandwidth per GPU:**
   - **GB200:** ConnectX-7, **400 Gb/s (NDR)** per GPU — Quantum-2 InfiniBand or Spectrum-X Ethernet.
   - **GB300:** ConnectX-8 SuperNIC, **800 Gb/s** per GPU — Quantum-X800 InfiniBand or Spectrum-X.
-- **GPUDirect RDMA:** the NIC DMAs **directly to/from GPU HBM**, bypassing the CPU and system memory. This is what keeps scale-out latency and CPU overhead low.
+- **GPUDirect RDMA:** the NIC DMAs **directly to/from GPU HBM**, bypassing the CPU and system memory. This is what keeps scale-out latency and CPU overhead low. **Platform dependency: GPUDirect RDMA on Grace Blackwell requires ConnectX-8 (CX8) SuperNIC.** ConnectX-7 (CX7) — present in some SuperPOD reference architectures — does not support GPUDirect RDMA on this platform; without CX8, RDMA traffic bounces through the CPU/system memory, eliminating the bypass and adding substantial latency and CPU overhead. Verify the NIC generation in your deployment before assuming direct HBM access.
 - **Rail-optimized topology:** each GPU's NIC connects to a dedicated "rail" of the spine, so same-rank GPUs across racks talk on their own leaf/spine plane — critical for clean data-parallel scaling.
 - **In-network reduction:** **SHARP** on the IB switches (CollNet in NCCL) offloads cross-rack all-reduce into the fabric, the scale-out analog of NVLS.
 - **When it comes into play:**
@@ -352,8 +352,8 @@ flowchart LR
 | `alltoall_perf`, 1 rack | MNNVL | GB300 busbw **~626 GB/s** target (measured 632) | All pairs on P2P/NVLink |
 | P2P bandwidth test, 4-GPU node | MNNVL (NVLink) | Measured NVLink P2P **~1,346 GB/s** (raw P2P, not all-reduce busbw) | NVLink P2P, not staged through host |
 | host↔device BW test | **C2C** | **~211 GB/s H2D / ~193 GB/s D2H** (not 900) | Traffic on C2C, not PCIe; `NCCL_NET_GDR_C2C=1` where relevant |
-| `all_reduce_perf`, multi-rack | RDMA (+ SHARP/CollNet) | Scale-out busbw plateau near single-NIC SOL: GB200 ~50 GB/s, GB300 ~100 GB/s per GPU | GPUDirect RDMA on, correct rail/HCA, CollNet if SHARP |
-| `sendrecv_perf`, cross-rack | RDMA | NIC line rate | No bounce buffers |
+| `all_reduce_perf`, multi-rack | RDMA (+ SHARP/CollNet) | Scale-out busbw plateau near single-NIC SOL: GB200 ~50 GB/s, GB300 ~100 GB/s per GPU | **CX8 SuperNIC present** (GPUDirect RDMA requires CX8; CX7 falls back to bounce-buffer path), correct rail/HCA, CollNet if SHARP |
+| `sendrecv_perf`, cross-rack | RDMA | NIC line rate | No bounce buffers; confirm CX8 (not CX7) for direct HBM access |
 
 Reference GB300 measured values (internal IPP5 run, per GPU): HBM STREAM Triad **7,389 GB/s** · C2C **211 GB/s H2D / 193 GB/s D2H** · NCCL all-reduce busBW **937 GB/s** · NCCL all-to-all busBW **632 GB/s**.
 
