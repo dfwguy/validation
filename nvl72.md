@@ -12,11 +12,11 @@
 
 | Fabric | Role | Scope (domain) | Per-GPU BW — theoretical vs **measured** | Coherence | Who drives it |
 |---|---|---|---|---|---|
-| **NVLink-C2C** | CPU ↔ GPU inside a superchip (**via the Grace CPU**) | 1 Grace + 2 Blackwell (a GB200/GB300 superchip) | 900 GB/s headline (aggregate) → **~211 GB/s H2D / ~193 GB/s D2H achievable per GPU** | Cache-coherent, unified memory | HW / driver (transparent) |
+| **NVLink-C2C** | Moves data across the **device↔host domain boundary** (Blackwell GPU ↔ Grace CPU) inside a superchip | 1 Grace + 2 Blackwell (a GB200/GB300 superchip) | 900 GB/s headline (aggregate) → **~211 GB/s H2D / ~193 GB/s D2H achievable per GPU** | Cache-coherent, unified memory | HW / driver (transparent) |
 | **MNNVL (NVLink 5 + NVSwitch)** | GPU ↔ GPU **scale-up** | **72 GPUs** = 1 NVLink domain (one rack) | **~937 GB/s all-reduce / ~632 GB/s all-to-all** (NCCL busBW, in-rack) | Load/store + P2P, non-coherent | NCCL P2P / NVLS |
 | **RDMA (InfiniBand or RoCE)** | GPU ↔ GPU **scale-out** | Across racks → SuperPOD / cluster | GB200: **400 Gb/s (50 GB/s)** · GB300: **800 Gb/s (100 GB/s)** line rate | Message-passing, GPUDirect RDMA | NCCL NET transport |
 
-> **Correction / key caveat on C2C.** The oft-quoted **900 GB/s** is the *theoretical aggregate* NVLink-C2C figure for the superchip. NVLink-C2C is **not** a GPU-to-GPU fabric — it is the link from the Blackwell GPU to the **Grace CPU** (and its LPDDR5X), so all C2C traffic is CPU-mediated. Measured achievable throughput on GB300 is **~211 GB/s host→device** and **~193 GB/s device→host** per GPU — roughly **4–5× below the headline** and about **6–7× below** measured NVLink GPU-to-GPU bandwidth. Treat C2C as a moderate-bandwidth CPU path, not a high-bandwidth memory tier. *(Source: internal GB300 Performance Benchmarking, IPP5 run.)*
+> **Key caveat on C2C.** C2C is what data crosses when it moves out of the GPU's **device domain** and into the **host domain** — the Grace CPU and its LPDDR5X. The physical link is NVLink-class (fast), but it is **not** a direct GPU-to-GPU data path: every transfer leaves device memory, lands in host memory, and is CPU-mediated. That domain crossing is why the real-world numbers come in well under the headline. The oft-quoted **900 GB/s** is the *theoretical aggregate* NVLink-C2C figure for the superchip; measured achievable throughput on GB300 is **~211 GB/s host→device** and **~193 GB/s device→host** per GPU — roughly **4–5× below the headline** and about **6–7× below** measured NVLink GPU-to-GPU bandwidth. Treat C2C as a moderate-bandwidth device↔host path, not a high-bandwidth memory tier. *(Source: internal GB300 Performance Benchmarking, IPP5 run.)*
 
 ---
 
@@ -338,10 +338,10 @@ flowchart TB
 
 ---
 
-## 4. NVLink-C2C — the CPU↔GPU path
+## 4. NVLink-C2C — the device↔host path
 
 - **What it connects:** the Grace CPU to its 2 Blackwell GPUs *within one superchip*. It is **not** a GPU-to-GPU path — every transfer is mediated by the Grace CPU and terminates in LPDDR5X.
-- **Bandwidth (the important correction):** the **900 GB/s** headline is a *theoretical aggregate*. Real achievable per-GPU throughput, measured on GB300, is **~211 GB/s host→device** and **~193 GB/s device→host** — roughly 4–5× below the headline. It is still faster than PCIe Gen5 x16 (~64 GB/s peak), but it is an order of magnitude slower than the NVLink GPU-to-GPU fabric, so **do not treat Grace LPDDR5X as a fast memory tier** the way HBM or NVLink peers behave.
+- **Bandwidth (the important caveat):** the **900 GB/s** headline is a *theoretical aggregate*. Real achievable per-GPU throughput, measured on GB300, is **~211 GB/s host→device** and **~193 GB/s device→host** — roughly 4–5× below the headline. It is still faster than PCIe Gen5 x16 (~64 GB/s peak), but it is an order of magnitude slower than the NVLink GPU-to-GPU fabric, so **do not treat Grace LPDDR5X as a fast memory tier** the way HBM or NVLink peers behave.
 - **Coherence:** hardware cache-coherent. CPU and GPU share a single address space (unified memory); either side can reference the other's memory with load/store semantics, no explicit copy required — but bandwidth is capped by the ~200 GB/s/direction C2C ceiling above.
 - **When it comes into play:**
   - Staging/prefetch of training data, optimizer state, and parameters from Grace LPDDR5X into HBM3e.
