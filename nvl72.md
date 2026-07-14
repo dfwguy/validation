@@ -26,17 +26,14 @@ Shows all three fabrics in one picture: **C2C** inside each superchip, **MNNVL**
 
 ```mermaid
 flowchart TB
-    subgraph RACK["NVL72 Rack - single NVLink domain (72 GPUs)"]
+    subgraph RACK["NVL72 Rack — single NVLink domain (72 GPUs, 18 compute trays x 2 superchips)"]
         direction TB
-        subgraph TRAY["Compute tray x18 - 2 superchips each"]
-            direction LR
-            subgraph SC1["GB200/GB300 Superchip"]
-                G1["Grace CPU<br/>LPDDR5X"]
-                B1["Blackwell GPU<br/>HBM3e"]
-                B2["Blackwell GPU<br/>HBM3e"]
-                G1 -- "C2C ~211/193 GB/s<br/>coherent, CPU-mediated" --> B1
-                G1 -- "C2C ~211/193 GB/s<br/>coherent, CPU-mediated" --> B2
-            end
+        subgraph SC1["GB200/GB300 Superchip"]
+            G1["Grace CPU<br/>LPDDR5X"]
+            B1["Blackwell GPU<br/>HBM3e"]
+            B2["Blackwell GPU<br/>HBM3e"]
+            G1 -- "C2C ~211/193 GB/s, coherent" --> B1
+            G1 -- "C2C ~211/193 GB/s, coherent" --> B2
         end
         NVS["NVSwitch backplane<br/>9 switch trays / 18 NVSwitch ASICs<br/>130 TB/s aggregate"]
         B1 -- "NVLink5 1.8 TB/s" --> NVS
@@ -46,8 +43,8 @@ flowchart TB
     SPINE["Quantum IB / Spectrum-X spine<br/>rail-optimized"]
     OTHER["Other racks<br/>SuperPOD / cluster"]
 
-    B1 -. "RDMA via SuperNIC<br/>GB200 400G / GB300 800G" .-> SPINE
-    B2 -. "RDMA via SuperNIC<br/>GB200 400G / GB300 800G" .-> SPINE
+    B1 -. "RDMA via SuperNIC — GB200 400G / GB300 800G" .-> SPINE
+    B2 -. "RDMA via SuperNIC — GB200 400G / GB300 800G" .-> SPINE
     SPINE -. "to other NVL72 racks" .-> OTHER
 ```
 
@@ -70,7 +67,7 @@ flowchart TB
     subgraph SC1["Superchip 1"]
         direction TB
         B1L["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
-        G1["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
+        G1["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0-U3"]:::nvidia
         B1R["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
         B1L <-->|"C2C"| G1
         G1  <-->|"C2C"| B1R
@@ -113,7 +110,7 @@ flowchart TB
     subgraph SC2["Superchip 2"]
         direction TB
         B2L["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
-        G2["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
+        G2["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0-U3"]:::nvidia
         B2R["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
         B2L <-->|"C2C"| G2
         G2  <-->|"C2C"| B2R
@@ -154,7 +151,7 @@ flowchart TB
     subgraph SC1["Superchip 1"]
         direction TB
         B1L["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
-        G1["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
+        G1["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0-U3"]:::nvidia
         B1R["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
         B1L <-->|"C2C"| G1
         G1  <-->|"C2C"| B1R
@@ -199,7 +196,7 @@ flowchart TB
     subgraph SC2["Superchip 2"]
         direction TB
         B2L["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
-        G2["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0–U3"]:::nvidia
+        G2["Grace<br/>NVLink C2C ×2 · x1 RP U5 · x4 RP U0-U3"]:::nvidia
         B2R["Blackwell<br/>NVLink C2C · x16 EP · NVLink"]:::nvidia
         B2L <-->|"C2C"| G2
         G2  <-->|"C2C"| B2R
@@ -389,10 +386,10 @@ The decision the hardware/NCCL makes for any given source→destination pair.
 
 ```mermaid
 flowchart TD
-    Q{"Source and destination<br/>of the transfer?"}
-    Q -->|"CPU to GPU<br/>same superchip"| C2C["NVLink-C2C<br/>~200 GB/s/dir, coherent"]
-    Q -->|"GPU to GPU<br/>same rack (<=72 GPUs)"| NVL["MNNVL / NVLink 5<br/>1.8 TB/s, P2P + NVLS"]
-    Q -->|"GPU to GPU<br/>different racks"| RDMA["RDMA / SuperNIC<br/>GPUDirect RDMA transport<br/>+ optional SHARP/CollNet offload"]
+    Q{"Source and destination of the transfer?"}
+    Q -->|"CPU to GPU, same superchip"| C2C["NVLink-C2C<br/>~200 GB/s/dir, coherent"]
+    Q -->|"GPU to GPU, same rack (<=72 GPUs)"| NVL["MNNVL / NVLink 5<br/>1.8 TB/s, P2P + NVLS"]
+    Q -->|"GPU to GPU, different racks"| RDMA["RDMA / SuperNIC<br/>GPUDirect RDMA transport<br/>+ optional SHARP/CollNet offload"]
 
     C2C --> NOTE1["Unified memory,<br/>load/store, data staging"]
     NVL --> NOTE2["TP / EP / CP collectives<br/>highest busbw"]
@@ -410,15 +407,15 @@ NCCL picks the fastest transport **per rank-pair, per collective, per channel**,
 ```mermaid
 flowchart TB
     START["NCCL collective<br/>e.g. AllReduce"] --> TOPO["Topology discovery:<br/>same superchip? same rack? different rack?"]
-    TOPO --> P2P{"Peers reachable<br/>over NVLink?"}
+    TOPO --> P2P{"Peers reachable over NVLink?"}
     P2P -->|"Yes, same rack"| TNVL["Transport: P2P over NVLink"]
     P2P -->|"No, cross-rack"| TNET["Transport: NET (IB/RoCE)<br/>GPUDirect RDMA"]
 
-    TNVL --> ALGO1{"Collective + size<br/>favor NVLS?"}
+    TNVL --> ALGO1{"Collective + size favor NVLS?"}
     ALGO1 -->|"Yes"| NVLS["NVLS - NVLink SHARP<br/>in-switch reduction"]
     ALGO1 -->|"No"| RING1["Ring / Tree over NVLink"]
 
-    TNET --> ALGO2{"SHARP-enabled<br/>IB switches?"}
+    TNET --> ALGO2{"SHARP-enabled IB switches?"}
     ALGO2 -->|"Yes"| COLLNET["CollNet / SHARP<br/>in-network reduction"]
     ALGO2 -->|"No"| RING2["Ring / Tree over NET"]
 ```
@@ -592,15 +589,15 @@ A standard transformer FFN applies the same feed-forward network to every token.
 ```mermaid
 sequenceDiagram
     participant R as Router (all GPUs)
-    participant D as Dispatch AllToAll<br/>(MNNVL)
-    participant E as Expert Compute<br/>(each GPU runs its experts)
-    participant C as Combine AllToAll<br/>(MNNVL)
+    participant D as Dispatch AllToAll (MNNVL)
+    participant E as Expert Compute (each GPU runs its experts)
+    participant C as Combine AllToAll (MNNVL)
     participant O as Output (all GPUs)
 
-    R->>D: router logits → select top-K experts per token<br/>tokens split into per-expert buckets
-    D->>E: each GPU sends token-chunks to expert-owner GPUs<br/>each GPU receives tokens assigned to its experts
+    R->>D: router logits — select top-K experts per token; tokens split into per-expert buckets
+    D->>E: each GPU sends token-chunks to expert-owner GPUs; receives tokens assigned to its experts
     E->>C: each GPU runs its expert FFN on received tokens
-    C->>O: each GPU sends expert outputs back to originating GPUs<br/>originating GPU applies router weights → weighted sum
+    C->>O: each GPU sends expert outputs back to originating GPUs; originating GPU applies router weights
 ```
 
 1. **Route:** the router scores each token against all N experts; top-K winners are selected. This is local compute — no communication yet.
