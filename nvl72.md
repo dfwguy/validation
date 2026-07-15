@@ -4,8 +4,6 @@
 
 **Audience:** HW/SW/network engineers.
 
-> The diagrams below are [Mermaid](https://mermaid.live). They render on GitHub, in VS Code, at mermaid.live, and in Google Docs via the "Mermaid" add-on. If you paste into a plain Google Doc, paste the diagram source into mermaid.live, export PNG/SVG, and drop the image in.
-
 ---
 
 ## 1. The three fabrics at a glance
