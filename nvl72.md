@@ -1,6 +1,6 @@
 # NVL72 Data Flows: C2C, MNNVL, and RDMA
 
-**Scope:** How data moves inside and between **GB200 / GB300 NVL72** racks across the three fabrics — NVLink-C2C (chip-to-chip), Multi-Node NVLink (MNNVL, the in-rack scale-up fabric), and RDMA (the cross-rack scale-out fabric). Framed for benchmarking (NCCL tests) and pre-training workloads. All performance figures and NCCL guidance are GB200/GB300 unless noted. A Vera Rubin node diagram is included in Section 3a for architectural reference only.
+**Scope:** How data moves inside and between **GB200 / GB300 NVL72** racks across the three fabrics — NVLink-C2C (chip-to-chip), Multi-Node NVLink (MNNVL, the in-rack scale-up fabric), and RDMA (the cross-rack scale-out fabric). Framed for benchmarking (NCCL tests) and pre-training workloads. All performance figures and NCCL guidance are GB200/GB300 unless noted. <!-- INTERNAL_START -->A Vera Rubin node diagram is included in Section 3a for architectural reference only.<!-- INTERNAL_END -->
 
 **Audience:** HW/SW/network engineers.
 
@@ -10,11 +10,11 @@
 
 | Fabric | Role | Scope (domain) | Per-GPU BW — theoretical vs **measured** | Coherence | Who drives it |
 |---|---|---|---|---|---|
-| **NVLink-C2C** | Moves data across the **device↔host domain boundary** (Blackwell GPU ↔ Grace CPU) inside a superchip | 1 Grace + 2 Blackwell (a GB200/GB300 superchip) | ~900 GB/s headline (aggregate) → **~200 GB/s/direction achievable per GPU** | Cache-coherent, unified memory | HW / driver (transparent) |
-| **MNNVL (NVLink 5 + NVSwitch)** | GPU ↔ GPU **scale-up** | **72 GPUs** = 1 NVLink domain (one rack) | **>900 GB/s all-reduce / ~600 GB/s all-to-all** (NCCL busBW, in-rack) | Load/store + P2P, non-coherent | NCCL P2P / NVLS |
+| **NVLink-C2C** | Moves data across the **device↔host domain boundary** (Blackwell GPU ↔ Grace CPU) inside a superchip | 1 Grace + 2 Blackwell (a GB200/GB300 superchip) | **~200 GB/s/direction per GPU** (measured on GB300 with `nvbandwidth`) | Cache-coherent, unified memory | HW / driver (transparent) |
+| **MNNVL (NVLink 5 + NVSwitch)** | GPU ↔ GPU **scale-up** | **72 GPUs** = 1 NVLink domain (one rack) | 18 links/GPU = **900 GB/s per direction** (1.8 TB/s bidirectional, GB200/GB300); measured busBW **>900 GB/s all-reduce / ~600 GB/s all-to-all** (NCCL Tests, in-rack) | Load/store + P2P, non-coherent | NCCL P2P / NVLS |
 | **RDMA (InfiniBand or RoCE)** | GPU ↔ GPU **scale-out** | Across racks → SuperPOD / cluster | GB200: **400 Gb/s (50 GB/s)** · GB300: **800 Gb/s (100 GB/s)** line rate | Message-passing, GPUDirect RDMA | NCCL NET transport |
 
-> **Key caveat on C2C.** C2C is what data crosses when it moves out of the GPU's **device domain** and into the **host domain** — the Grace CPU and its LPDDR5X. The physical link is NVLink-class (fast), but it is **not** a direct GPU-to-GPU data path: every transfer leaves device memory, lands in host memory, and is CPU-mediated. That domain crossing is why the real-world numbers come in well under the headline. The oft-quoted **~900 GB/s** is the *theoretical aggregate* NVLink-C2C figure for the superchip; measured achievable throughput on GB300 is **~200 GB/s per direction** per GPU — roughly **4–5× below the headline** and about **6–7× below** measured NVLink GPU-to-GPU bandwidth. Treat C2C as a moderate-bandwidth device↔host path, not a high-bandwidth memory tier. *(Source: NVIDIA Internal.)*
+> **Key caveat on C2C.** C2C is what data crosses when it moves out of the GPU's **device domain** and into the **host domain** — the Grace CPU and its LPDDR5X. The physical link is NVLink-class (fast), but it is **not** a direct GPU-to-GPU data path: every transfer leaves device memory, lands in host memory, and is CPU-mediated. The C2C link runs at **~200 GB/s per direction** per GPU (measured on GB300 with `nvbandwidth`) — that is the link's design point, working as intended. It is a **separate path** from the NVLink GPU-to-GPU fabric, not a slower version of it. Treat C2C as a moderate-bandwidth device↔host link, not a high-bandwidth memory tier. <!-- INTERNAL_START -->*(Source: NVIDIA Internal.)*<!-- INTERNAL_END -->
 
 ---
 
@@ -34,8 +34,8 @@ flowchart TB
             G1 -- "C2C ~200 GB/s/dir, coherent" --> B2
         end
         NVS["NVSwitch backplane<br/>9 switch trays / 18 NVSwitch ASICs<br/>130 TB/s aggregate"]
-        B1 -- "NVLink5 1.8 TB/s" --> NVS
-        B2 -- "NVLink5 1.8 TB/s" --> NVS
+        B1 -- "NVLink 5: 900 GB/s/dir (1.8 TB/s bidir)" --> NVS
+        B2 -- "NVLink 5: 900 GB/s/dir (1.8 TB/s bidir)" --> NVS
     end
 
     SPINE["Quantum IB / Spectrum-X spine<br/>rail-optimized"]
@@ -50,6 +50,7 @@ flowchart TB
 
 ---
 
+<!-- INTERNAL_START -->
 ## 3. Diagram — Superchip component detail (PCIe, NICs, NVMe, management)
 
 One node contains **two superchips** (each a Grace CPU + 2 Blackwell GPUs), connected by 6× Clinks (~150 GB/s). GB200 and GB300 share the same Grace+Blackwell+NVLink topology but differ in NIC generation, NVMe attachment point, and RDMA path to the GPU (see Section 6).
@@ -330,26 +331,27 @@ flowchart TB
 - **PCIe Gen6** throughout (vs Gen5 in GB300).
 - **BF4-800G** replaces BF3 as the front-end N/S NIC; Rubin also adds a Gen6 x2 PCIe endpoint back to Vera (not present on Blackwell).
 - Management and NVMe attachment pattern mirrors GB200/GB300 (off the CPU-side PCIe tree).
+<!-- INTERNAL_END -->
 
 ---
 
 ## 4. NVLink-C2C — the device↔host path
 
 - **What it connects:** the Grace CPU to its 2 Blackwell GPUs *within one superchip*. It is **not** a GPU-to-GPU path — every transfer is mediated by the Grace CPU and terminates in LPDDR5X.
-- **Bandwidth (the important caveat):** the **~900 GB/s** headline is a *theoretical aggregate*. Real achievable per-GPU throughput, measured on GB300, is **~200 GB/s per direction** — roughly 4–5× below the headline. It is still faster than PCIe Gen5 x16 (~64 GB/s peak), but it is an order of magnitude slower than the NVLink GPU-to-GPU fabric, so **do not treat Grace LPDDR5X as a fast memory tier** the way HBM or NVLink peers behave.
+- **Bandwidth:** the C2C link runs at **~200 GB/s per direction** per GPU (measured on GB300 with `nvbandwidth`) — that is the link's design point. It is faster than PCIe Gen5 x16 (~64 GB/s peak), but it is a **separate path** from the NVLink GPU-to-GPU fabric, so **do not treat Grace LPDDR5X as a fast memory tier** the way HBM or NVLink peers behave.
 - **Coherence:** hardware cache-coherent. CPU and GPU share a single address space (unified memory); either side can reference the other's memory with load/store semantics, no explicit copy required — but bandwidth is capped by the ~200 GB/s/direction C2C ceiling above.
 - **When it comes into play:**
   - Staging/prefetch of training data, optimizer state, and parameters from Grace LPDDR5X into HBM3e.
-  - CPU-side offload (e.g., optimizer states, activations, KV-cache spill) where HBM capacity is the constraint — **but this is bandwidth-limited by C2C**; offloading hot state to Grace can bottleneck a step at ~200 GB/s, not 900.
+  - CPU-side offload (e.g., optimizer states, activations, KV-cache spill) where HBM capacity is the constraint — **but this is bandwidth-limited by C2C**; offloading hot state to Grace can bottleneck a step at the C2C link's ~200 GB/s/direction, which is a different (and lower) path than the NVLink GPU-to-GPU fabric.
   - Any `cudaMemcpy`/UVM traffic between host and device — rides C2C, not PCIe.
-- **Benchmarking note:** C2C does **not** appear in a GPU-to-GPU NCCL bus-bandwidth number. Measure it separately (host↔device bandwidth tests, or unified-memory microbenchmarks). GB300 reference points: **~200 GB/s per direction** per GPU. If a data-loader or offload path is bottlenecked, this ~200 GB/s/direction ceiling is the thing to check — not the ~900 headline.
+- **Benchmarking note:** C2C does **not** appear in a GPU-to-GPU NCCL bus-bandwidth number. Measure it separately (host↔device bandwidth tests, or unified-memory microbenchmarks). GB300 reference point (`nvbandwidth`): **~200 GB/s per direction** per GPU. If a data-loader or offload path is bottlenecked, this ~200 GB/s/direction C2C ceiling is the thing to check — it is a separate path from the NVLink GPU-to-GPU number, not a slower version of it.
 
 ---
 
 ## 5. MNNVL — the in-rack scale-up fabric
 
 - **What it connects:** all **72 GPUs** in the rack into **one flat NVLink domain** via the NVSwitch backplane. Any GPU reaches any other GPU at full NVLink bandwidth in one switch hop.
-- **Bandwidth:** 18 NVLink 5 links per GPU; **130 TB/s** NVSwitch backplane aggregate. Measured GB300 NCCL busBW: **>900 GB/s all-reduce / ~600 GB/s all-to-all** in-rack (72 GPUs) — an order of magnitude above the C2C path.
+- **Bandwidth:** each GPU has **18 NVLink 5 links** (GB200/GB300), giving **900 GB/s per direction** (1.8 TB/s bidirectional) per GPU; **130 TB/s** NVSwitch backplane aggregate. Measured GB300 busBW (NCCL Tests AllReduce / AlltoAll): **>900 GB/s all-reduce / ~600 GB/s all-to-all** in-rack (72 GPUs).
 - **Topology:** 9 NVSwitch trays, 18 NVSwitch ASICs, copper backplane; each GPU has one link to each in-rack switch plane.
 - **Semantics:** direct GPU load/store and P2P copy across the domain; **not** cache-coherent like C2C, but far higher bandwidth and lower latency than RDMA. Supports **NVLink SHARP (NVLS)** — in-network reduction executed in the NVSwitch, which offloads collectives (all-reduce, reduce-scatter, all-gather) from the GPUs.
 - **When it comes into play:**
@@ -368,7 +370,7 @@ flowchart TB
 - **GPUDirect RDMA — path differs by generation:**
   - **GB300 (CX8):** the CX8 SuperNIC is **directly connected to the Blackwell GPU**, so the NIC DMAs straight to/from HBM, bypassing C2C and Grace entirely. This is true GPUDirect RDMA.
   - **GB200 (CX7):** there is no direct GPU↔NIC connection. RDMA traffic traverses **GPU → NVLink-C2C → Grace CPU crossbar → PCIe → CX7**. CX7 does not support GPUDirect RDMA on this architecture; traffic goes through the Grace crossbar rather than directly to HBM. The NIC line rate (400 Gb/s = 50 GB/s) is well below the C2C ceiling (~200 GB/s/direction), so C2C is not the bandwidth bottleneck, but the path is indirect and the latency/CPU-overhead profile differs from the GB300 direct path.
-  - **Vera Rubin (CX-9, reference):** same indirect architecture as GB200 — Rubin GPU → NVLink-C2C → Vera CPU crossbar → PCIe Gen6 → CX-9. CX-9 attaches to Vera (CPU), not directly to Rubin. See Section 3a.
+  - **Vera Rubin (CX-9, reference):** same indirect architecture as GB200 — Rubin GPU → NVLink-C2C → Vera CPU crossbar → PCIe Gen6 → CX-9. CX-9 attaches to Vera (CPU), not directly to Rubin. <!-- INTERNAL_START -->See Section 3a.<!-- INTERNAL_END -->
 - **Rail-optimized topology:** each GPU's NIC connects to a dedicated "rail" of the spine, so same-rank GPUs across racks talk on their own leaf/spine plane — critical for clean data-parallel scaling.
 - **In-network reduction:** **SHARP** on the IB switches (CollNet in NCCL) offloads cross-rack all-reduce into the fabric, the scale-out analog of NVLS.
 - **When it comes into play:**
@@ -386,7 +388,7 @@ The decision the hardware/NCCL makes for any given source→destination pair.
 flowchart TD
     Q{"Source and destination of the transfer?"}
     Q -->|"CPU to GPU, same superchip"| C2C["NVLink-C2C<br/>~200 GB/s/dir, coherent"]
-    Q -->|"GPU to GPU, same rack (<=72 GPUs)"| NVL["MNNVL / NVLink 5<br/>1.8 TB/s, P2P + NVLS"]
+    Q -->|"GPU to GPU, same rack (<=72 GPUs)"| NVL["MNNVL / NVLink 5<br/>900 GB/s/dir (1.8 TB/s bidir), P2P + NVLS"]
     Q -->|"GPU to GPU, different racks"| RDMA["RDMA / SuperNIC<br/>GPUDirect RDMA transport<br/>+ optional SHARP/CollNet offload"]
 
     C2C --> NOTE1["Unified memory,<br/>load/store, data staging"]
@@ -448,13 +450,13 @@ The two collectives behave very differently as participant count grows beyond a 
 
 A ring all-reduce decomposes into reduce-scatter followed by all-gather; each phase advances one step at a time around the ring. The critical property is that each step is **neighbor-only**: GPU_i sends to GPU_{i+1} and receives from GPU_{i-1}. Within a 72-GPU NVLink domain all those neighbors are NVLink peers. Extending the ring across racks adds **one RDMA seam hop per rack the ring spans** (two for the 2-rack case shown below) — regardless of how many GPUs are in the ring. NVLS further offloads the in-rack reduction into the NVSwitch, removing per-GPU round-trips entirely for that phase.
 
-Busbw consequence: in-rack all-reduce runs near NVLink line rate (**>900 GB/s** on GB300). Adding racks extends the ring over RDMA at the seam, but the NVLink segments still operate at full NVLink speed; effective busbw degradation is proportional to the fraction of ring steps that traverse RDMA.
+Busbw consequence: in-rack all-reduce runs near NVLink's per-direction line rate (**>900 GB/s** on GB300). Adding racks extends the ring over RDMA at the seam, but the NVLink segments still operate at full NVLink speed; effective busbw degradation is proportional to the fraction of ring steps that traverse RDMA.
 
 ```mermaid
 flowchart LR
     subgraph RACK1["Rack 1 — 72-GPU NVLink domain"]
         direction LR
-        G0(("G0")) -->|"NVLink ~1.8 TB/s"| G1(("G1"))
+        G0(("G0")) -->|"NVLink 900 GB/s/dir (~1.8 TB/s bidir)"| G1(("G1"))
         G1 -->|"NVLink"| GDOT(("..."))
         GDOT -->|"NVLink"| G71(("G71"))
         G71 -.->|"NVLink close ring"| G0
@@ -532,7 +534,7 @@ flowchart LR
 |---|---|---|---|
 | GPU | Blackwell (B200-class) | Blackwell Ultra (B300) | More FP4/FP8 compute → higher demand on all fabrics |
 | HBM per GPU | ~192 GB HBM3e | **288 GB HBM3e** (20.7 TB/rack) | More KV-cache / activations resident → less C2C/RDMA spill |
-| **NVLink-C2C** | ~900 GB/s headline (~200 GB/s/dir achievable) | ~900 GB/s headline (**~200 GB/s/dir measured**) | Unchanged — CPU-mediated, ~200 GB/s/dir in practice |
+| **NVLink-C2C** | ~200 GB/s/dir per GPU | **~200 GB/s/dir per GPU** (measured) | Unchanged — CPU-mediated device↔host link |
 | **MNNVL (NVLink 5)** | >900 GB/s all-reduce / ~600 GB/s all-to-all (NCCL busBW) | Same | Unchanged — same in-rack scale-up |
 | **Scale-out NIC** | ConnectX-7, **400 Gb/s** per GPU | ConnectX-8 SuperNIC, **800 Gb/s** per GPU | **2× cross-rack bandwidth** → DP/PP scale-out roughly halves the NVLink:RDMA gap (all-reduce busbw basis: 18× → 9×) |
 | Scale-out fabric | Quantum-2 IB / Spectrum-X | Quantum-X800 IB / Spectrum-X | Higher spine bandwidth, same rail-optimized model |
@@ -547,12 +549,11 @@ flowchart LR
 |---|---|---|---|
 | `all_reduce_perf`, 2–72 GPUs, 1 rack | MNNVL (NVLS) | GB300 busbw **>900 GB/s** target | NVLS engaged (`NCCL_NVLS_ENABLE=1`), no NET/SHM fallback |
 | `alltoall_perf`, 1 rack | MNNVL | GB300 busbw **~600 GB/s** target | All pairs on P2P/NVLink |
-| P2P bandwidth test, 4-GPU node | MNNVL (NVLink) | Measured NVLink P2P **>1,300 GB/s** (raw P2P, not all-reduce busbw) | NVLink P2P, not staged through host |
-| host↔device BW test | **C2C** | **~200 GB/s per direction** (not ~900) | Traffic on C2C, not PCIe; `NCCL_NET_GDR_C2C=1` where relevant |
+| host↔device BW test (`nvbandwidth`) | **C2C** | **~200 GB/s per direction** (C2C link — a separate path from the NVLink GPU-to-GPU fabric) | Traffic on C2C, not PCIe; `NCCL_NET_GDR_C2C=1` where relevant |
 | `all_reduce_perf`, multi-rack | RDMA (+ SHARP/CollNet) | Scale-out busbw plateau near single-NIC SOL: GB200 ~50 GB/s, GB300 ~100 GB/s per GPU | GB300: CX8 is directly connected to Blackwell — GPUDirect RDMA, true HBM access. GB200: path is GPU → C2C → Grace crossbar → PCIe → CX7; CX7 does not support GPUDirect RDMA. Verify rail/HCA mapping, CollNet if SHARP. |
 | `sendrecv_perf`, cross-rack | RDMA | NIC line rate | GB300 (CX8): direct GPU↔NIC path. GB200 (CX7): indirect C2C→crossbar→PCIe path — no GPUDirect RDMA. |
 
-Reference GB300 measured values (NVIDIA Internal, per GPU): HBM STREAM Triad **>7,000 GB/s** · C2C **~200 GB/s per direction** · NCCL all-reduce busBW **>900 GB/s** · NCCL all-to-all busBW **~600 GB/s**.
+Reference GB300 measured values <!-- INTERNAL_START -->(NVIDIA Internal, per GPU)<!-- INTERNAL_END --> — tools noted: HBM STREAM Triad **>7,000 GB/s** (STREAM) · C2C **~200 GB/s per direction** (`nvbandwidth`) · NCCL all-reduce busBW **>900 GB/s** (NCCL Tests AllReduce) · NCCL all-to-all busBW **~600 GB/s** (NCCL Tests AlltoAll).
 
 **AlgBW vs BusBW — and why busBW can exceed line rate.**
 
@@ -561,9 +562,9 @@ NCCL tests report two bandwidth figures for every collective:
 - **AlgBW (algorithm bandwidth):** `message_size / time`. This is the raw throughput from the application's perspective — how fast was data moved, end-to-end, relative to the message the caller passed in.
 - **BusBW (bus bandwidth):** `AlgBW × correction_factor`. NCCL multiplies AlgBW by a collective-specific factor derived from the ideal ring algorithm cost to normalize across GPU count and collective type, making numbers comparable. For all-reduce the factor is `2(N−1)/N`; for all-to-all it is `(N−1)/N`. As N grows these factors approach 2 and 1 respectively.
 
-**Why BusBW can exceed NVLink's nominal 900 GB/s line rate** when NVLS (NVLink SHARP) is engaged: the BusBW formula was designed for ring algorithms, where data traverses every link in both directions. NVLS is not a ring — the NVSwitch performs the reduction in-network, so data is aggregated *inside the switch fabric* without flowing all the way around the ring. The effective data movement the GPUs see is lower than what a ring would require, yet NCCL applies the same ring-derived multiplier. The result is a BusBW number that can appear to exceed the physical link's bidirectional rate. This is not a measurement error or an indication of data moving faster than the hardware allows — it is a known artifact of applying a ring correction factor to a non-ring (in-network reduction) algorithm. AlgBW remains the honest end-to-end throughput figure. When you see BusBW **>900 GB/s** on an all-reduce test with NVLS enabled, the correct interpretation is: *NVLS is working, and the collective completed faster than a ring would have at that GPU count.*
+**Why BusBW can exceed NVLink's nominal 900 GB/s per-direction line rate** when NVLS (NVLink SHARP) is engaged: the BusBW formula was designed for ring algorithms, where data traverses every link in both directions. NVLS is not a ring — the NVSwitch performs the reduction in-network, so data is aggregated *inside the switch fabric* without flowing all the way around the ring. The effective data movement the GPUs see is lower than what a ring would require, yet NCCL applies the same ring-derived multiplier. The result is a BusBW number that can appear to exceed the physical link's 900 GB/s per-direction line rate (the link is 1.8 TB/s bidirectional on GB200/GB300). This is not a measurement error or an indication of data moving faster than the hardware allows — it is a known artifact of applying a ring correction factor to a non-ring (in-network reduction) algorithm. AlgBW remains the honest end-to-end throughput figure. When you see BusBW **>900 GB/s** on an all-reduce test with NVLS enabled, the correct interpretation is: *NVLS is working, and the collective completed faster than a ring would have at that GPU count.*
 
-**Interpreting results:** a healthy multi-rack all-reduce shows a clear two-tier profile — near-NVLink busbw (~900+ GB/s) while the message stays in-rack, dropping to NIC-limited busbw (GB300 ~100 GB/s) once it crosses racks. If in-rack numbers look NIC-limited, the topology/HCA mapping is forcing NET; if cross-rack numbers are worse than the NIC's busbw plateau, check GPUDirect RDMA, rail mapping, and congestion control. For NVLink-domain testing, don't assume `NCCL_NVLS_ENABLE=1 NCCL_MNNVL_ENABLE=1` must both be forced — NCCL auto-detects the NVLink domain and selects NVLS/MNNVL accordingly (NVIDIA Internal GB300 runs use `NCCL_MNNVL_ENABLE=1` with `NCCL_NVLS_ENABLE=0` in some cases). Verify NCCL *selected* NVLS/MNNVL as intended rather than hard-coding the pair. Separately, a straggler on any one of the 4 CX8 rails throttles the whole cross-rack collective.
+**Interpreting results:** a healthy multi-rack all-reduce shows a clear two-tier profile — near-NVLink busbw (~900+ GB/s) while the message stays in-rack, dropping to NIC-limited busbw (GB300 ~100 GB/s) once it crosses racks. If in-rack numbers look NIC-limited, the topology/HCA mapping is forcing NET; if cross-rack numbers are worse than the NIC's busbw plateau, check GPUDirect RDMA, rail mapping, and congestion control. For NVLink-domain testing, don't assume `NCCL_NVLS_ENABLE=1 NCCL_MNNVL_ENABLE=1` must both be forced — NCCL auto-detects the NVLink domain and selects NVLS/MNNVL accordingly <!-- INTERNAL_START -->(NVIDIA Internal GB300 runs use `NCCL_MNNVL_ENABLE=1` with `NCCL_NVLS_ENABLE=0` in some cases)<!-- INTERNAL_END -->. Verify NCCL *selected* NVLS/MNNVL as intended rather than hard-coding the pair. Separately, a straggler on any one of the 4 CX8 rails throttles the whole cross-rack collective.
 
 ---
 
@@ -711,10 +712,12 @@ The optimizer state row dominates training; the KV-cache row dominates inference
 
 ---
 
+<!-- INTERNAL_START -->
 **NVIDIA Internal (measured benchmark data — the basis for all "measured" figures above):**
 
-- [GB300 Performance Benchmarking — NVIDIA Internal (Confluence)](https://nvidia.atlassian.net/wiki/spaces/3P/pages/2075773370/GB300+Performance+Benchmarking) — C2C ~200 GB/s/dir, NVLink P2P >1,300 GB/s, NCCL all-reduce >900 GB/s, all-to-all ~600 GB/s, STREAM Triad >7,000 GB/s.
+- [GB300 Performance Benchmarking — NVIDIA Internal (Confluence)](https://nvidia.atlassian.net/wiki/spaces/3P/pages/2075773370/GB300+Performance+Benchmarking) — C2C ~200 GB/s/dir, NCCL all-reduce >900 GB/s, all-to-all ~600 GB/s, STREAM Triad >7,000 GB/s.
 - [NCCL Collective Behavior and Performance GB300 — NVIDIA Internal (Google Drive)](https://drive.google.com/file/d/1pbf0_x67wIK7MqkKRIamLQjq4OyoARd0/view) — rail-optimized NCCL path behavior; ~900 GB/s NVLink vs ~100 GB/s NIC bus-bandwidth constants.
+<!-- INTERNAL_END -->
 
 **Public (architecture and theoretical specs):**
 
