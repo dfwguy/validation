@@ -554,6 +554,15 @@ flowchart LR
 
 Reference GB300 measured values (NVIDIA Internal, per GPU): HBM STREAM Triad **>7,000 GB/s** · C2C **~200 GB/s per direction** · NCCL all-reduce busBW **>900 GB/s** · NCCL all-to-all busBW **~600 GB/s**.
 
+**AlgBW vs BusBW — and why busBW can exceed line rate.**
+
+NCCL tests report two bandwidth figures for every collective:
+
+- **AlgBW (algorithm bandwidth):** `message_size / time`. This is the raw throughput from the application's perspective — how fast was data moved, end-to-end, relative to the message the caller passed in.
+- **BusBW (bus bandwidth):** `AlgBW × correction_factor`. NCCL multiplies AlgBW by a collective-specific factor derived from the ideal ring algorithm cost to normalize across GPU count and collective type, making numbers comparable. For all-reduce the factor is `2(N−1)/N`; for all-to-all it is `(N−1)/N`. As N grows these factors approach 2 and 1 respectively.
+
+**Why BusBW can exceed NVLink's nominal 900 GB/s line rate** when NVLS (NVLink SHARP) is engaged: the BusBW formula was designed for ring algorithms, where data traverses every link in both directions. NVLS is not a ring — the NVSwitch performs the reduction in-network, so data is aggregated *inside the switch fabric* without flowing all the way around the ring. The effective data movement the GPUs see is lower than what a ring would require, yet NCCL applies the same ring-derived multiplier. The result is a BusBW number that can appear to exceed the physical link's bidirectional rate. This is not a measurement error or an indication of data moving faster than the hardware allows — it is a known artifact of applying a ring correction factor to a non-ring (in-network reduction) algorithm. AlgBW remains the honest end-to-end throughput figure. When you see BusBW **>900 GB/s** on an all-reduce test with NVLS enabled, the correct interpretation is: *NVLS is working, and the collective completed faster than a ring would have at that GPU count.*
+
 **Interpreting results:** a healthy multi-rack all-reduce shows a clear two-tier profile — near-NVLink busbw (~900+ GB/s) while the message stays in-rack, dropping to NIC-limited busbw (GB300 ~100 GB/s) once it crosses racks. If in-rack numbers look NIC-limited, the topology/HCA mapping is forcing NET; if cross-rack numbers are worse than the NIC's busbw plateau, check GPUDirect RDMA, rail mapping, and congestion control. For NVLink-domain testing, don't assume `NCCL_NVLS_ENABLE=1 NCCL_MNNVL_ENABLE=1` must both be forced — NCCL auto-detects the NVLink domain and selects NVLS/MNNVL accordingly (NVIDIA Internal GB300 runs use `NCCL_MNNVL_ENABLE=1` with `NCCL_NVLS_ENABLE=0` in some cases). Verify NCCL *selected* NVLS/MNNVL as intended rather than hard-coding the pair. Separately, a straggler on any one of the 4 CX8 rails throttles the whole cross-rack collective.
 
 ---
