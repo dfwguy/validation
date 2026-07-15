@@ -600,10 +600,10 @@ sequenceDiagram
     participant C as Combine AllToAll (MNNVL)
     participant O as Output (all GPUs)
 
-    R->>D: router logits — select top-K experts per token; tokens split into per-expert buckets
-    D->>E: each GPU sends token-chunks to expert-owner GPUs; receives tokens assigned to its experts
+    R->>D: router logits — select top-K experts per token, tokens split into per-expert buckets
+    D->>E: each GPU sends token-chunks to expert-owner GPUs, receives tokens assigned to its experts
     E->>C: each GPU runs its expert FFN on received tokens
-    C->>O: each GPU sends expert outputs back to originating GPUs; originating GPU applies router weights
+    C->>O: each GPU sends expert outputs back to originating GPUs, originating GPU applies router weights
 ```
 
 1. **Route:** the router scores each token against all N experts; top-K winners are selected. This is local compute — no communication yet.
