@@ -679,14 +679,14 @@ The Grace CPU runs the data pipeline: tokenization, shuffling, sequence packing.
 
 #### 2. CPU optimizer state offload (D2H → compute → H2D)
 
-For very large models, Adam's two moment tensors (first and second moment, FP32) cost ~2× the parameter memory. A 70B-parameter model has ~560 GB of optimizer state at FP32 — far beyond a single GPU's 288 GB HBM3e. Solutions like ZeRO-3 (sharded optimizer), DeepSpeed CPU offload, or Megatron's distributed optimizer can move optimizer states to Grace LPDDR5X.
+For very large models, the **optimizer state** — the extra per-parameter values the optimizer keeps between steps to compute each weight update (typically two FP32 values per parameter) — costs ~2× the parameter memory. A 70B-parameter model has ~560 GB of optimizer state at FP32 — far beyond a single GPU's 288 GB HBM3e. Solutions like ZeRO-3 (sharded optimizer), DeepSpeed CPU offload, or Megatron's distributed optimizer can move optimizer states to Grace LPDDR5X.
 
 At the optimizer step:
 1. Gradients (or sharded gradients) flow **D2H** to Grace — up to ~200 GB/s.
 2. The Grace CPU (or Grace GPU tensor cores in a compute-offload variant) updates the moment estimates and applies the weight update.
 3. Updated parameters flow **H2D** back to HBM — up to ~200 GB/s.
 
-This round-trip is **directly on the step-time critical path** if it is not overlapped. Note what actually crosses C2C: the FP32 moments (~560 GB for a 70B model) stay **resident in Grace LPDDR5X** and are updated in place by the CPU — they do *not* traverse the link each step. What crosses is **gradients D2H + updated parameters H2D** — ~280 GB for a 70B FP16 model — taking **~1.3–1.5 seconds** of pure transfer time per step (before any compute). Overlap with the backward pass is essential; if the optimizer update cannot be fully hidden, C2C becomes the step-time bottleneck, not GPU compute.
+This round-trip is **directly on the step-time critical path** if it is not overlapped. Note what actually crosses C2C: the FP32 optimizer state (~560 GB for a 70B model) stays **resident in Grace LPDDR5X** and is updated in place by the CPU — it does *not* traverse the link each step. What crosses is **gradients D2H + updated parameters H2D** — ~280 GB for a 70B FP16 model — taking **~1.3–1.5 seconds** of pure transfer time per step (before any compute). Overlap with the backward pass is essential; if the optimizer update cannot be fully hidden, C2C becomes the step-time bottleneck, not GPU compute.
 
 **Key check:** measure step time with CPU offload on vs. off. If step time grows by more than the backward pass duration, optimizer D2H/H2D is not fully overlapped.
 
@@ -704,7 +704,7 @@ At ~200 GB/s/direction, reloading a 16 GB KV-cache block takes **~80 ms** — a 
 |---|---|---|---|
 | Token embedding lookup (H2D) | H2D | ~KB range | negligible |
 | Activation checkpointing (store) | D2H | 1–10 GB/layer (model-dependent) | 5–50 ms/layer |
-| Optimizer state update (ZeRO-3) | D2H + H2D | ~280 GB (grad↓ + param↑; moments stay resident on Grace) | ~1.4 s round-trip |
+| Optimizer state update (ZeRO-3) | D2H + H2D | ~280 GB (grad↓ + param↑; optimizer state stays resident on Grace) | ~1.4 s round-trip |
 | KV-cache spill/reload (long ctx) | D2H + H2D | GB-scale per eviction | 10–100 ms/eviction |
 | Checkpoint save | D2H | ~140 GB params (FP16) | ~720 ms |
 
