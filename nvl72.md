@@ -549,7 +549,7 @@ flowchart LR
 |---|---|---|---|
 | `all_reduce_perf`, 2–72 GPUs, 1 rack | MNNVL (NVLS) | GB300 busbw **>900 GB/s** target | NVLS engaged (`NCCL_NVLS_ENABLE=1`), no NET/SHM fallback |
 | `alltoall_perf`, 1 rack | MNNVL | GB300 busbw **~600 GB/s** target | All pairs on P2P/NVLink |
-| host↔device BW test (`nvbandwidth`) | **C2C** | **~200 GB/s per direction** (C2C link — a separate path from the NVLink GPU-to-GPU fabric) | Traffic on C2C, not PCIe; `NCCL_NET_GDR_C2C=1` where relevant |
+| host↔device BW test (`nvbandwidth`) | **C2C** | **~200 GB/s per direction** (C2C link — a separate path from the NVLink GPU-to-GPU fabric) | Confirm traffic is on C2C, not PCIe; `NCCL_P2P_LEVEL` determines whether NCCL uses the P2P/C2C path for host↔device transfers |
 | `all_reduce_perf`, multi-rack | RDMA (+ SHARP/CollNet) | Scale-out busbw plateau near single-NIC SOL: GB200 ~50 GB/s, GB300 ~100 GB/s per GPU | GB300: CX8 is directly connected to Blackwell — GPUDirect RDMA, true HBM access. GB200: path is GPU → C2C → Grace crossbar → PCIe → CX7; CX7 does not support GPUDirect RDMA. Verify rail/HCA mapping, CollNet if SHARP. |
 | `sendrecv_perf`, cross-rack | RDMA | NIC line rate | GB300 (CX8): direct GPU↔NIC path. GB200 (CX7): indirect C2C→crossbar→PCIe path — no GPUDirect RDMA. |
 
