@@ -14,6 +14,7 @@ PDF engines:
 """
 
 import argparse
+import json
 import re
 import shutil
 import subprocess
@@ -21,6 +22,13 @@ import sys
 import os
 
 TMPDIR = os.environ.get("TMPDIR", "/tmp")
+
+# Force Mermaid to emit native SVG <text> elements instead of wrapping labels
+# in <foreignObject> (embedded XHTML). foreignObject is a browser-only feature:
+# non-browser SVG renderers (WeasyPrint, librsvg) drop it, which is why diagram
+# text came out blank and pushed us to raster PNGs. With htmlLabels off, the SVG
+# renders identically everywhere and stays vector (smaller + searchable text).
+MERMAID_CONFIG = {"htmlLabels": False, "flowchart": {"htmlLabels": False}}
 
 # Chrome locations to try when engine=chrome
 _CHROME_CANDIDATES = [
@@ -143,8 +151,8 @@ hr { border: none; border-top: 1px solid var(--border); margin: 24px 0; }
 ul, ol { padding-left: 24px; margin: 8px 0; }
 li { margin: 3px 0; }
 strong { color: var(--text); }
-.mermaid-png { text-align: center; margin: 20px 0; }
-.mermaid-png img { max-width: 100%; height: auto; }
+.mermaid-svg { text-align: center; margin: 20px 0; }
+.mermaid-svg svg { max-width: 100%; height: auto; }
 
 @media print {
     body { max-width: none; padding: 20px 32px; font-size: 9.5pt; }
@@ -189,43 +197,53 @@ def _extract_mermaid_blocks(md_text):
 
 
 def _render_diagrams(blocks, mermaid_theme, bg_color):
-    """Render each mermaid block to a PNG and return HTML img tags (base64-encoded)."""
-    import base64
+    """Render each mermaid block to an inline SVG and return HTML fragments.
+
+    SVGs are inlined (not base64 <img>) so they inherit the document's fonts
+    and scale cleanly. mmdc hardcodes id="my-svg" and scopes every internal CSS
+    rule to it, so each diagram gets a unique --svgId to avoid style collisions
+    when multiple diagrams share one page.
+    """
+    cfg_path = os.path.join(TMPDIR, "mermaid_config.json")
+    with open(cfg_path, "w") as f:
+        json.dump(MERMAID_CONFIG, f)
+
     imgs = []
     for i, src in enumerate(blocks):
         mmd_path = os.path.join(TMPDIR, f"diagram_{i}.mmd")
-        png_path = os.path.join(TMPDIR, f"diagram_{i}.png")
+        svg_path = os.path.join(TMPDIR, f"diagram_{i}.svg")
         with open(mmd_path, "w") as f:
             f.write(src)
         result = subprocess.run(
             [
-                "mmdc", "-i", mmd_path, "-o", png_path,
+                "mmdc", "-i", mmd_path, "-o", svg_path,
+                "--configFile", cfg_path,
+                "--svgId", f"diagram-{i}",
                 "--theme", mermaid_theme,
                 "--backgroundColor", bg_color,
-                "--scale", "2",
                 "--quiet",
             ],
             capture_output=True,
         )
-        if result.returncode != 0 or not os.path.exists(png_path):
+        if result.returncode != 0 or not os.path.exists(svg_path):
             print(f"  [warn] mmdc failed on diagram {i}: {result.stderr.decode().strip()}",
                   file=sys.stderr)
             imgs.append(f'<pre class="mermaid-error">{src}</pre>')
             continue
-        with open(png_path, "rb") as f:
-            b64 = base64.b64encode(f.read()).decode()
-        imgs.append(f'<div class="mermaid-png"><img src="data:image/png;base64,{b64}" alt="diagram {i+1}"></div>')
+        with open(svg_path) as f:
+            svg = f.read()
+        imgs.append(f'<div class="mermaid-svg">{svg}</div>')
         print(f"  diagram {i + 1}/{len(blocks)} rendered")
     return imgs
 
 
 def md_to_html_body(md_text, mermaid_theme, bg_color):
     """
-    Convert markdown to HTML with mermaid diagrams pre-rendered to PNG.
+    Convert markdown to HTML with mermaid diagrams pre-rendered to inline SVG.
 
     Pandoc mangles mermaid source (turns --> into em-dashes, escapes quotes,
-    etc.) so blocks are extracted before pandoc runs, rendered to PNG by mmdc,
-    then spliced back in as base64 data-URI img tags.
+    etc.) so blocks are extracted before pandoc runs, rendered to SVG by mmdc,
+    then spliced back in as inline <svg> markup.
     """
     stripped, blocks = _extract_mermaid_blocks(md_text)
 
@@ -335,6 +353,7 @@ def main():
 
     input_path = os.path.abspath(args.input)
     output_dir = os.path.abspath(args.output_dir) if args.output_dir else os.getcwd()
+    os.makedirs(output_dir, exist_ok=True)
     base = os.path.splitext(os.path.basename(input_path))[0]
 
     with open(input_path) as f:
