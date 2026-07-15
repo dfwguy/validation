@@ -11,7 +11,7 @@
 | Fabric | Role | Scope (domain) | Per-GPU BW — theoretical vs **measured** | Coherence | Who drives it |
 |---|---|---|---|---|---|
 | **NVLink-C2C** | Moves data across the **device↔host domain boundary** (Blackwell GPU ↔ Grace CPU) inside a superchip | 1 Grace + 2 Blackwell (a GB200/GB300 superchip) | **~200 GB/s/direction per GPU** (measured on GB300 with `nvbandwidth`) | Cache-coherent, unified memory | HW / driver (transparent) |
-| **MNNVL (NVLink 5 + NVSwitch)** | GPU ↔ GPU **scale-up** | **72 GPUs** = 1 NVLink domain (one rack) | 18 links/GPU = **900 GB/s per direction** (1.8 TB/s bidirectional, GB200/GB300); measured busBW **>900 GB/s all-reduce / ~600 GB/s all-to-all** (NCCL Tests, in-rack) | Load/store + P2P, non-coherent | NCCL P2P / NVLS |
+| **MNNVL (NVLink 5 + NVSwitch)** | GPU ↔ GPU **scale-up** | **72 GPUs** = 1 NVLink domain (one rack) | 18 links/GPU = **900 GB/s per direction** (1.8 TB/s bidirectional, GB200/GB300); measured busBW **>900 GB/s all-reduce / ~600 GB/s all-to-all** (NCCL Tests, in-rack) | Load/store + P2P, non-coherent | NCCL P2P / NVLink SHARP (NVLS) |
 | **RDMA (InfiniBand or RoCE)** | GPU ↔ GPU **scale-out** | Across racks → SuperPOD / cluster | GB200: **400 Gb/s (50 GB/s)** · GB300: **800 Gb/s (100 GB/s)** line rate | Message-passing, GPUDirect RDMA | NCCL NET transport |
 
 > **Key caveat on C2C.** C2C is what data crosses when it moves out of the GPU's **device domain** and into the **host domain** — the Grace CPU and its LPDDR5X. The physical link is NVLink-class (fast), but it is **not** a direct GPU-to-GPU data path: every transfer leaves device memory, lands in host memory, and is CPU-mediated. The C2C link runs at **~200 GB/s per direction** per GPU (measured on GB300 with `nvbandwidth`) — that is the link's design point, working as intended. It is a **separate path** from the NVLink GPU-to-GPU fabric, not a slower version of it. Treat C2C as a moderate-bandwidth device↔host link, not a high-bandwidth memory tier. <!-- INTERNAL_START -->*(Source: NVIDIA Internal.)*<!-- INTERNAL_END -->
@@ -357,7 +357,7 @@ flowchart TB
 - **When it comes into play:**
   - The bandwidth-hungry collectives of a pre-training step: tensor-parallel (TP) all-reduce/all-gather, expert-parallel (EP) all-to-all, sequence/context-parallel exchanges.
   - Any parallelism dimension you want to keep *inside* the 72-GPU domain because it exchanges the most bytes per step.
-- **Benchmarking note:** In-rack NCCL collectives should ride NVLink/NVLS and report the highest busbw you'll see. Confirm NVLS is engaged (`NCCL_NVLS_ENABLE=1`, and NCCL ≥ the version that supports Blackwell NVLS) and that no unexpected hop is falling back to net.
+- **Benchmarking note:** In-rack NCCL collectives should ride NVLink / NVLink SHARP (NVLS) and report the highest busbw you'll see. Confirm NVLink SHARP (NVLS) is engaged (`NCCL_NVLS_ENABLE=1`, and NCCL ≥ the version that supports Blackwell NVLink SHARP (NVLS)) and that no unexpected hop is falling back to net.
 
 ---
 
@@ -372,7 +372,7 @@ flowchart TB
   - **GB200 (CX7):** there is no direct GPU↔NIC connection. RDMA traffic traverses **GPU → NVLink-C2C → Grace CPU crossbar → PCIe → CX7**. CX7 does not support GPUDirect RDMA on this architecture; traffic goes through the Grace crossbar rather than directly to HBM. The NIC line rate (400 Gb/s = 50 GB/s) is well below the C2C ceiling (~200 GB/s/direction), so C2C is not the bandwidth bottleneck, but the path is indirect and the latency/CPU-overhead profile differs from the GB300 direct path.
   - **Vera Rubin (CX-9, reference):** same indirect architecture as GB200 — Rubin GPU → NVLink-C2C → Vera CPU crossbar → PCIe Gen6 → CX-9. CX-9 attaches to Vera (CPU), not directly to Rubin. <!-- INTERNAL_START -->See Section 3a.<!-- INTERNAL_END -->
 - **Rail-optimized topology:** each GPU's NIC connects to a dedicated "rail" of the spine, so same-rank GPUs across racks talk on their own leaf/spine plane — critical for clean data-parallel scaling.
-- **In-network reduction:** **SHARP** on the IB switches (CollNet in NCCL) offloads cross-rack all-reduce into the fabric, the scale-out analog of NVLS.
+- **In-network reduction:** **SHARP** on the IB switches (CollNet in NCCL) offloads cross-rack all-reduce into the fabric, the scale-out analog of NVLink SHARP (NVLS).
 - **When it comes into play:**
   - Communication that must cross the rack boundary: data-parallel (DP) gradient all-reduce and pipeline-parallel (PP) point-to-point sends between racks.
   - Any collective whose participants span more than 72 GPUs.
@@ -388,7 +388,7 @@ The decision the hardware/NCCL makes for any given source→destination pair.
 flowchart TD
     Q{"Source and destination of the transfer?"}
     Q -->|"CPU to GPU, same superchip"| C2C["NVLink-C2C<br/>~200 GB/s/dir, coherent"]
-    Q -->|"GPU to GPU, same rack (<=72 GPUs)"| NVL["MNNVL / NVLink 5<br/>900 GB/s/dir (1.8 TB/s bidir), P2P + NVLS"]
+    Q -->|"GPU to GPU, same rack (<=72 GPUs)"| NVL["MNNVL / NVLink 5<br/>900 GB/s/dir (1.8 TB/s bidir), P2P + NVLink SHARP (NVLS)"]
     Q -->|"GPU to GPU, different racks"| RDMA["RDMA / SuperNIC<br/>GPUDirect RDMA transport<br/>+ optional SHARP/CollNet offload"]
 
     C2C --> NOTE1["Unified memory,<br/>load/store, data staging"]
@@ -413,8 +413,8 @@ flowchart TB
     P2P -->|"Yes, same rack"| TNVL["Transport: P2P over NVLink"]
     P2P -->|"No, cross-rack"| TNET["Transport: NET (IB/RoCE)<br/>GPUDirect RDMA"]
 
-    TNVL --> ALGO1{"Collective + size favor NVLS?"}
-    ALGO1 -->|"Yes"| NVLS["NVLS - NVLink SHARP<br/>in-switch reduction"]
+    TNVL --> ALGO1{"Collective + size favor NVLink SHARP (NVLS)?"}
+    ALGO1 -->|"Yes"| NVLS["NVLink SHARP (NVLS)<br/>in-switch reduction"]
     ALGO1 -->|"No"| RING1["Ring / Tree over NVLink"]
 
     TNET --> ALGO2{"SHARP-enabled IB switches?"}
@@ -427,14 +427,14 @@ flowchart TB
 | NCCL transport / algo | Fabric used | Typical use |
 |---|---|---|
 | **P2P (CUMEM)** | MNNVL / NVLink | Any GPU-GPU pair inside the rack |
-| **NVLS** (NVLink SHARP) | MNNVL / NVSwitch | In-rack all-reduce / reduce-scatter / all-gather, large messages |
+| **NVLink SHARP (NVLS)** | MNNVL / NVSwitch | In-rack all-reduce / reduce-scatter / all-gather, large messages |
 | **NET + GPUDirect RDMA** | RDMA (IB/RoCE) | Any GPU-GPU pair spanning racks |
 | **CollNet / SHARP** | RDMA (IB switch) | Cross-rack all-reduce offloaded into the fabric |
 | SHM / host | PCIe/host (avoid) | Fallback when P2P/NET can't be used — usually a misconfig |
 
 **Levers that decide the path:** `NCCL_NVLS_ENABLE`, `NCCL_COLLNET_ENABLE`, `NCCL_IB_HCA` (rail/HCA mapping), `NCCL_P2P_LEVEL`, `NCCL_ALGO`/`NCCL_PROTO`. If an in-rack test drops to `NET` or `SHM`, the topology file or HCA mapping is wrong.
 
-> **Ring vs Tree** — two algorithms NCCL uses to implement collectives when in-network reduction (NVLS/SHARP) is unavailable. A **ring** arranges all GPUs in a logical loop; each GPU passes data only to its neighbor, so every link carries the same load and the *bandwidth cost stays constant regardless of ring size* — but the number of steps (latency) grows linearly with GPU count. A **tree** arranges GPUs in a binary reduction tree; it reaches the root faster than a ring (log N steps vs N steps) and is better for small messages and latency-sensitive collectives, but the root link becomes a bottleneck at scale. NCCL picks between them automatically based on message size and topology.
+> **Ring vs Tree** — two algorithms NCCL uses to implement collectives when in-network reduction (NVLink SHARP (NVLS) / IB SHARP) is unavailable. A **ring** arranges all GPUs in a logical loop; each GPU passes data only to its neighbor, so every link carries the same load and the *bandwidth cost stays constant regardless of ring size* — but the number of steps (latency) grows linearly with GPU count. A **tree** arranges GPUs in a binary reduction tree; it reaches the root faster than a ring (log N steps vs N steps) and is better for small messages and latency-sensitive collectives, but the root link becomes a bottleneck at scale. NCCL picks between them automatically based on message size and topology.
 >
 > *In practice NCCL doesn't use a single ring or a single tree.* It builds **multiple concurrent ring channels** to spread traffic across all the links a GPU has, and its tree algorithm is a **double binary tree** — two interleaved trees where a node that is a leaf in one tree is an interior node in the other, so every link is used in both directions and the single-root bottleneck of a plain binary tree disappears. The single-ring / single-tree picture above is the mental model; treat it as the simplification it is.
 
@@ -448,7 +448,7 @@ The two collectives behave very differently as participant count grows beyond a 
 
 ### AllReduce — ring steps are always neighbor-to-neighbor
 
-A ring all-reduce decomposes into reduce-scatter followed by all-gather; each phase advances one step at a time around the ring. The critical property is that each step is **neighbor-only**: GPU_i sends to GPU_{i+1} and receives from GPU_{i-1}. Within a 72-GPU NVLink domain all those neighbors are NVLink peers. Extending the ring across racks adds **one RDMA seam hop per rack the ring spans** (two for the 2-rack case shown below) — regardless of how many GPUs are in the ring. NVLS further offloads the in-rack reduction into the NVSwitch, removing per-GPU round-trips entirely for that phase.
+A ring all-reduce decomposes into reduce-scatter followed by all-gather; each phase advances one step at a time around the ring. The critical property is that each step is **neighbor-only**: GPU_i sends to GPU_{i+1} and receives from GPU_{i-1}. Within a 72-GPU NVLink domain all those neighbors are NVLink peers. Extending the ring across racks adds **one RDMA seam hop per rack the ring spans** (two for the 2-rack case shown below) — regardless of how many GPUs are in the ring. NVLink SHARP (NVLS) further offloads the in-rack reduction into the NVSwitch, removing per-GPU round-trips entirely for that phase.
 
 Busbw consequence: in-rack all-reduce runs near NVLink's per-direction line rate (**>900 GB/s** on GB300). Adding racks extends the ring over RDMA at the seam, but the NVLink segments still operate at full NVLink speed; effective busbw degradation is proportional to the fraction of ring steps that traverse RDMA.
 
@@ -460,8 +460,8 @@ flowchart LR
         G1 -->|"NVLink"| GDOT(("..."))
         GDOT -->|"NVLink"| G71(("G71"))
         G71 -.->|"NVLink close ring"| G0
-        NVS["NVSwitch / NVLS<br/>in-switch reduce"]
-        GDOT -. "NVLS offload" .-> NVS
+        NVS["NVSwitch / NVLink SHARP (NVLS)<br/>in-switch reduce"]
+        GDOT -. "NVLink SHARP (NVLS) offload" .-> NVS
     end
     subgraph RACK2["Rack 2 — 72-GPU NVLink domain"]
         direction LR
@@ -477,7 +477,7 @@ flowchart LR
 
 ### AllToAll — every rank sends a unique chunk to every other rank (pure P2P)
 
-AllToAll is a complete exchange: each GPU sends one unique chunk to each of the N-1 other GPUs. There is no ring or tree shortcut — each send is an independent, point-to-point transfer. Any pair that spans a rack boundary **must** traverse RDMA; there is no way to route cross-rack all-to-all traffic through NVLink. NVLS cannot help because NVLS offloads *reductions* (sum/max), not arbitrary data movement.
+AllToAll is a complete exchange: each GPU sends one unique chunk to each of the N-1 other GPUs. There is no ring or tree shortcut — each send is an independent, point-to-point transfer. Any pair that spans a rack boundary **must** traverse RDMA, and NVLink SHARP (NVLS) cannot help because it offloads *reductions* (sum/max), not arbitrary data movement.
 
 Busbw consequence: the moment the all-to-all domain crosses a rack boundary, every GPU incurs RDMA sends to all 72 GPUs in the far rack. Busbw drops immediately to the NIC-limited plateau — **GB200 ~50 GB/s, GB300 ~100 GB/s** — for the cross-rack fraction. This is why expert-parallel all-to-all must stay inside the 72-GPU NVLink domain (Section 10).
 
@@ -490,10 +490,12 @@ flowchart TB
         A2["GPU_j sends 1 unique chunk to each of 71 in-rack peers<br/>NVLink P2P — busbw ~600 GB/s"]
     end
     A1 -->|"72 x 72 = 5,184 unique P2P sends each direction"| A2
-    A2 -->|"all RDMA — no ring/tree shortcut — no NVLS"| A1
+    A2 -->|"all RDMA — no ring/tree shortcut — no NVLink SHARP (NVLS)"| A1
     BWKEY2["Busbw drops to the NIC-limited plateau immediately when any pair crosses a rack boundary<br/>GB200 ~50 GB/s · GB300 ~100 GB/s — keep EP all-to-all inside the NVLink domain"]
     style BWKEY2 fill:#fce8e8,stroke:#c00000
 ```
+
+> **Rail-optimized AllToAll and PXN.** NVLink still plays a role even in cross-rack AllToAll: NCCL's PXN (Peer eXchange via NVLink) feature lets a GPU forward data over NVLink to a neighbor's NIC, spreading traffic across the available network rails rather than saturating a single NIC. Configuring 4 or 8 rails (matched to GPU count) reduces per-rail congestion and can substantially improve cross-rack AllToAll throughput. See [Doubling All2All Performance with NCCL 2.12](https://developer.nvidia.com/blog/doubling-all2all-performance-with-nvidia-collective-communication-library-2-12/).
 
 ---
 
@@ -547,7 +549,7 @@ flowchart LR
 
 | Test / scope | Fabric exercised | Reference ceiling | What to confirm |
 |---|---|---|---|
-| `all_reduce_perf`, 2–72 GPUs, 1 rack | MNNVL (NVLS) | GB300 busbw **>900 GB/s** target | NVLS engaged (`NCCL_NVLS_ENABLE=1`), no NET/SHM fallback |
+| `all_reduce_perf`, 2–72 GPUs, 1 rack | MNNVL (NVLink SHARP / NVLS) | GB300 busbw **>900 GB/s** target | NVLink SHARP (NVLS) engaged (`NCCL_NVLS_ENABLE=1`), no NET/SHM fallback |
 | `alltoall_perf`, 1 rack | MNNVL | GB300 busbw **~600 GB/s** target | All pairs on P2P/NVLink |
 | host↔device BW test (`nvbandwidth`) | **C2C** | **~200 GB/s per direction** (C2C link — a separate path from the NVLink GPU-to-GPU fabric) | Confirm traffic is on C2C, not PCIe; `NCCL_P2P_LEVEL` determines whether NCCL uses the P2P/C2C path for host↔device transfers |
 | `all_reduce_perf`, multi-rack | RDMA (+ SHARP/CollNet) | Scale-out busbw plateau near single-NIC SOL: GB200 ~50 GB/s, GB300 ~100 GB/s per GPU | GB300: CX8 is directly connected to Blackwell — GPUDirect RDMA, true HBM access. GB200: path is GPU → C2C → Grace crossbar → PCIe → CX7; CX7 does not support GPUDirect RDMA. Verify rail/HCA mapping, CollNet if SHARP. |
@@ -562,9 +564,9 @@ NCCL tests report two bandwidth figures for every collective:
 - **AlgBW (algorithm bandwidth):** `message_size / time`. This is the raw throughput from the application's perspective — how fast was data moved, end-to-end, relative to the message the caller passed in.
 - **BusBW (bus bandwidth):** `AlgBW × correction_factor`. NCCL multiplies AlgBW by a collective-specific factor derived from the ideal ring algorithm cost to normalize across GPU count and collective type, making numbers comparable. For all-reduce the factor is `2(N−1)/N`; for all-to-all it is `(N−1)/N`. As N grows these factors approach 2 and 1 respectively.
 
-**Why BusBW can exceed NVLink's nominal 900 GB/s per-direction line rate** when NVLS (NVLink SHARP) is engaged: the BusBW formula was designed for ring algorithms, where data traverses every link in both directions. NVLS is not a ring — the NVSwitch performs the reduction in-network, so data is aggregated *inside the switch fabric* without flowing all the way around the ring. The effective data movement the GPUs see is lower than what a ring would require, yet NCCL applies the same ring-derived multiplier. The result is a BusBW number that can appear to exceed the physical link's 900 GB/s per-direction line rate (the link is 1.8 TB/s bidirectional on GB200/GB300). This is not a measurement error or an indication of data moving faster than the hardware allows — it is a known artifact of applying a ring correction factor to a non-ring (in-network reduction) algorithm. AlgBW remains the honest end-to-end throughput figure. When you see BusBW **>900 GB/s** on an all-reduce test with NVLS enabled, the correct interpretation is: *NVLS is working, and the collective completed faster than a ring would have at that GPU count.*
+**Why BusBW can exceed NVLink's nominal 900 GB/s per-direction line rate** when NVLink SHARP (NVLS) is engaged: the BusBW formula was designed for ring algorithms, where data traverses every link in both directions. NVLink SHARP (NVLS) is not a ring — the NVSwitch performs the reduction in-network, so data is aggregated *inside the switch fabric* without flowing all the way around the ring. The effective data movement the GPUs see is lower than what a ring would require, yet NCCL applies the same ring-derived multiplier. The result is a BusBW number that can appear to exceed the physical link's 900 GB/s per-direction line rate (the link is 1.8 TB/s bidirectional on GB200/GB300). This is not a measurement error or an indication of data moving faster than the hardware allows — it is a known artifact of applying a ring correction factor to a non-ring (in-network reduction) algorithm. AlgBW remains the honest end-to-end throughput figure. When you see BusBW **>900 GB/s** on an all-reduce test with NVLink SHARP (NVLS) enabled, the correct interpretation is: *NVLink SHARP (NVLS) is working, and the collective completed faster than a ring would have at that GPU count.*
 
-**Interpreting results:** a healthy multi-rack all-reduce shows a clear two-tier profile — near-NVLink busbw (~900+ GB/s) while the message stays in-rack, dropping to NIC-limited busbw (GB300 ~100 GB/s) once it crosses racks. If in-rack numbers look NIC-limited, the topology/HCA mapping is forcing NET; if cross-rack numbers are worse than the NIC's busbw plateau, check GPUDirect RDMA, rail mapping, and congestion control. For NVLink-domain testing, don't assume `NCCL_NVLS_ENABLE=1 NCCL_MNNVL_ENABLE=1` must both be forced — NCCL auto-detects the NVLink domain and selects NVLS/MNNVL accordingly <!-- INTERNAL_START -->(NVIDIA Internal GB300 runs use `NCCL_MNNVL_ENABLE=1` with `NCCL_NVLS_ENABLE=0` in some cases)<!-- INTERNAL_END -->. Verify NCCL *selected* NVLS/MNNVL as intended rather than hard-coding the pair. Separately, a straggler on any one of the 4 CX8 rails throttles the whole cross-rack collective.
+**Interpreting results:** a healthy multi-rack all-reduce shows a clear two-tier profile — near-NVLink busbw (~900+ GB/s) while the message stays in-rack, dropping to NIC-limited busbw (GB300 ~100 GB/s) once it crosses racks. If in-rack numbers look NIC-limited, the topology/HCA mapping is forcing NET; if cross-rack numbers are worse than the NIC's busbw plateau, check GPUDirect RDMA, rail mapping, and congestion control. For NVLink-domain testing, don't assume `NCCL_NVLS_ENABLE=1 NCCL_MNNVL_ENABLE=1` must both be forced — NCCL auto-detects the NVLink domain and selects NVLink SHARP (NVLS) / MNNVL accordingly <!-- INTERNAL_START -->(NVIDIA Internal GB300 runs use `NCCL_MNNVL_ENABLE=1` with `NCCL_NVLS_ENABLE=0` in some cases)<!-- INTERNAL_END -->. Verify NCCL *selected* NVLink SHARP (NVLS) / MNNVL as intended rather than hard-coding the pair. Separately, a straggler on any one of the 4 CX8 rails throttles the whole cross-rack collective.
 
 ---
 
@@ -578,7 +580,7 @@ Every participant contributes a **same-shape tensor**; every participant receive
 - **Data parallelism (DP / FSDP / ZeRO):** each rank trains on a different micro-batch and accumulates local gradients. An all-reduce (or reduce-scatter + all-gather for FSDP) synchronizes gradients across ranks before the optimizer step. Fires *once per step, after the backward pass*.
 - **Sequence / context parallelism (CP):** query/key/value tensors split along the sequence dimension need to be reassembled for attention; all-gather and reduce-scatter collectives re-form the full sequence.
 
-**Why it is bandwidth-efficient on NVLink:** the ring reduce-scatter + all-gather decomposition means each GPU only ever exchanges data with its two ring neighbors. Inside a 72-GPU NVLink domain those neighbors are always NVLink peers, and NVLS (NVLink SHARP) can offload the reduction entirely into the NVSwitch — removing per-GPU round-trips. Measured all-reduce busbw on GB300 reaches **>900 GB/s**.
+**Why it is bandwidth-efficient on NVLink:** the ring reduce-scatter + all-gather decomposition means each GPU only ever exchanges data with its two ring neighbors. Inside a 72-GPU NVLink domain those neighbors are always NVLink peers, and NVLink SHARP (NVLS) can offload the reduction entirely into the NVSwitch — removing per-GPU round-trips. Measured all-reduce busbw on GB300 reaches **>900 GB/s**.
 
 ### AllToAll in one sentence
 Every participant sends a **unique chunk** to every other participant and receives a **unique chunk** from every other participant. There is no aggregation — each destination gets different data from each source, and the full N×N exchange must complete before any GPU can proceed.
@@ -645,7 +647,7 @@ flowchart TD
     DL["Data loader on Grace CPU<br/>(LPDDR5X or NVMe → LPDDR5X)"]
     H2D["H2D via C2C<br/>~200 GB/s — tokens/embeddings into HBM"]
     FWD["Forward pass<br/>(HBM compute)"]
-    TP_AR["TP AllReduce<br/>MNNVL / NVLS >900 GB/s"]
+    TP_AR["TP AllReduce<br/>MNNVL / NVLink SHARP (NVLS) >900 GB/s"]
     EP_D["MoE Dispatch AllToAll<br/>MNNVL ~600 GB/s"]
     EXP["Expert compute<br/>(HBM compute)"]
     EP_C["MoE Combine AllToAll<br/>MNNVL ~600 GB/s"]
