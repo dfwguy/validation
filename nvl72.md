@@ -137,7 +137,7 @@ flowchart TB
         CX7_2B  -->|"400G"| BE4
     end
 
-    G1 <-->|"6x Clinks (~150 GB/s)"| G2
+    G1 <-->|"6x Clinks (~150 GB/s/dir combined)"| G2
 ```
 
 ### GB300 node
@@ -219,7 +219,7 @@ flowchart TB
         CX8_2B -->|"800G"| BE4
     end
 
-    G1 <-->|"6x Clinks (~150 GB/s)"| G2
+    G1 <-->|"6x Clinks (~150 GB/s/dir combined)"| G2
 ```
 
 **Key observations (both generations):**
@@ -228,7 +228,7 @@ flowchart TB
 - **Back-end NICs:** GB200 has two CX-7s at 400G each per superchip (4 per node). GB300 has two CX-8 SuperNICs at 800G each per superchip (4 per node).
 - **RDMA path differs:** GB300/CX-8 has a direct Blackwell↔CX-8 connection (true GPUDirect RDMA). GB200/CX-7 routes via Grace (C2C → Grace crossbar → PCIe → CX-7); see Section 6.
 - **Superchip 2** adds an M.2 slot (x4) for local OS/boot storage in both generations.
-- C2C is strictly intra-superchip; the inter-superchip path is the 6× Clinks between Grace CPUs.
+- C2C is strictly intra-superchip; the inter-superchip path is the **6× Clinks** between Grace CPUs (~150 GB/s per direction combined across all six links — roughly 25 GB/s/dir per link).
 
 ---
 
@@ -398,6 +398,8 @@ flowchart TD
 
 **Rule of thumb:** stay on the fastest fabric the transfer's scope allows. C2C for CPU↔GPU, NVLink for anything inside 72 GPUs, RDMA only when you must leave the rack.
 
+> **TP / EP / CP** — shorthand for the three parallelism dimensions that generate the heaviest in-rack traffic: **T**ensor **P**arallel, **E**xpert **P**arallel (MoE), and **C**ontext **P**arallel (a.k.a. Sequence Parallel / SP). Each maps to a specific collective and fabric; see [Section 10](#10-mapping-fabrics-to-pre-training-parallelism) for the full breakdown.
+
 ---
 
 ## 8. Diagram 3 — How NCCL selects the transport
@@ -432,9 +434,15 @@ flowchart TB
 
 **Levers that decide the path:** `NCCL_NVLS_ENABLE`, `NCCL_COLLNET_ENABLE`, `NCCL_IB_HCA` (rail/HCA mapping), `NCCL_P2P_LEVEL`, `NCCL_ALGO`/`NCCL_PROTO`. If an in-rack test drops to `NET` or `SHM`, the topology file or HCA mapping is wrong.
 
+> **Ring vs Tree** — two algorithms NCCL uses to implement collectives when in-network reduction (NVLS/SHARP) is unavailable. A **ring** arranges all GPUs in a logical loop; each GPU passes data only to its neighbor, so every link carries the same load and the *bandwidth cost stays constant regardless of ring size* — but the number of steps (latency) grows linearly with GPU count. A **tree** arranges GPUs in a binary reduction tree; it reaches the root faster than a ring (log N steps vs N steps) and is better for small messages and latency-sensitive collectives, but the root link becomes a bottleneck at scale. NCCL picks between them automatically based on message size and topology.
+>
+> *In practice NCCL doesn't use a single ring or a single tree.* It builds **multiple concurrent ring channels** to spread traffic across all the links a GPU has, and its tree algorithm is a **double binary tree** — two interleaved trees where a node that is a leaf in one tree is an interior node in the other, so every link is used in both directions and the single-root bottleneck of a plain binary tree disappears. The single-ring / single-tree picture above is the mental model; treat it as the simplification it is.
+
 ---
 
 ## 9. AllReduce vs AllToAll — collective behavior on the fabrics
+
+> **Not familiar with AllReduce or AllToAll?** See [Section 13](#13-allreduce-and-alltoall-what-they-do-and-why-they-differ) for plain-language definitions of both collectives before reading this section.
 
 The two collectives behave very differently as participant count grows beyond a single rack.
 
