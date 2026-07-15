@@ -2,13 +2,14 @@
 """Convert a Markdown file to PDF using NVIDIA themes.
 
 Usage:
-    python3 build_pdf.py -i report.md [-o /output/dir] [--engine weasyprint|chrome]
+    uv run python build_pdf.py -i report.md [-o /output/dir] [--engine weasyprint|chrome]
 
 Outputs <basename>-dark.pdf and <basename>-light.pdf in the output directory
 (defaults to the current working directory).
 
 PDF engines:
-  weasyprint  Pure-Python, no browser required. Needs: uvx (default)
+  weasyprint  Pure-Python, no browser required. Declared as a dependency in
+              pyproject.toml; `uv run` resolves it automatically. (default)
   chrome      Chrome/Chromium headless. Needs: Chrome installed.
               On WSL, set CHROME env var or Chrome is auto-detected.
 """
@@ -276,14 +277,9 @@ def build_html(body, theme):
 
 
 def html_to_pdf_weasyprint(html_path, pdf_path):
-    """Convert HTML to PDF using WeasyPrint via uvx (no browser required)."""
-    result = subprocess.run(
-        ["uvx", "--from", "weasyprint", "weasyprint", html_path, pdf_path],
-        capture_output=True,
-    )
-    if result.returncode != 0:
-        print("WeasyPrint error:", result.stderr.decode(), file=sys.stderr)
-        sys.exit(1)
+    """Convert HTML to PDF using WeasyPrint (dependency in pyproject.toml)."""
+    from weasyprint import HTML
+    HTML(filename=html_path).write_pdf(pdf_path)
 
 
 def html_to_pdf_chrome(html_path, pdf_path):

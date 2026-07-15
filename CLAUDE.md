@@ -28,16 +28,15 @@ Run these from the repo root, in order:
 python3 generate_partner.py
 
 # 2. Build PDFs (writes <base>-dark.pdf and <base>-light.pdf to CWD)
-python3 build_pdf.py -i nvl72.md
-python3 build_pdf.py -i nvl72-partner.md
+uv run python build_pdf.py -i nvl72.md
+uv run python build_pdf.py -i nvl72-partner.md
 ```
 
 Verify the partner doc has no leaks: `grep -c INTERNAL nvl72-partner.md` should print `0`.
 
 ### Requirements / gotchas
 
-- **Tools:** `mmdc` (mermaid-cli, via node), `pandoc`, and `uvx` (runs WeasyPrint, the default PDF engine — no browser needed). `build_pdf.py --engine chrome` is the fallback.
-- **Sandbox:** WeasyPrint runs through `uvx`, which needs to write its cache under `~/.cache/uv`. That path is outside the sandbox's writable set, so the `build_pdf.py` step must run **with the sandbox disabled**. `generate_partner.py` runs fine sandboxed.
+- **Tools:** `mmdc` (mermaid-cli, via node), `pandoc`, and `uv` (manages WeasyPrint as a Python dependency via `pyproject.toml` — `uv run` installs it automatically on first use). `build_pdf.py --engine chrome` is the fallback.
 - **Mermaid labels:** rendered as native SVG `<text>` (htmlLabels off) so non-browser renderers don't drop them. Consequence: **no `<br/>` line breaks beyond what already renders** — keep diagram labels on one line where possible.
 - The partner doc has fewer diagrams than the full doc when a diagram sits inside an `INTERNAL` block (e.g. the Vera Rubin reference diagram).
 

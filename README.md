@@ -13,8 +13,26 @@
 
 ```bash
 python3 generate_partner.py            # nvl72.md → nvl72-partner.md (strips INTERNAL blocks)
-python3 build_pdf.py -i nvl72.md       # → nvl72-{dark,light}.pdf
-python3 build_pdf.py -i nvl72-partner.md   # → nvl72-partner-{dark,light}.pdf
+uv run python build_pdf.py -i nvl72.md            # → nvl72-{dark,light}.pdf
+uv run python build_pdf.py -i nvl72-partner.md    # → nvl72-partner-{dark,light}.pdf
 ```
 
-Requires `mmdc` (mermaid-cli), `pandoc`, and `uvx`. The PDF step must run with the sandbox disabled (WeasyPrint writes to `~/.cache/uv`). See [CLAUDE.md](CLAUDE.md) for details, internal-content markers, and bandwidth-number conventions.
+Requires `mmdc` (mermaid-cli), `pandoc`, and `uv` (manages WeasyPrint automatically).
+
+### Installing `build-pdf` as a global tool
+
+Install once from the repo root and use `build-pdf` anywhere:
+
+```bash
+uv tool install /path/to/this/repo
+# or, from within the repo:
+uv tool install .
+```
+
+Then from any directory:
+
+```bash
+build-pdf -i report.md [-o /output/dir] [--engine weasyprint|chrome]
+```
+
+See [CLAUDE.md](CLAUDE.md) for internal-content markers and bandwidth-number conventions.
