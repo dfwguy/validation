@@ -3,3 +3,6 @@
 
 # Generated partner version — rebuild with generate_partner.py
 nvl72-partner.md
+
+build
+*.egg-info
