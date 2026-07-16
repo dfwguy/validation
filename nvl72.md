@@ -605,17 +605,20 @@ A standard transformer FFN applies the same feed-forward network to every token.
 ### The four phases of one MoE FFN layer
 
 ```mermaid
-sequenceDiagram
-    participant R as Router (all GPUs)
-    participant D as Dispatch AllToAll (MNNVL)
-    participant E as Expert Compute (each GPU runs its experts)
-    participant C as Combine AllToAll (MNNVL)
-    participant O as Output (all GPUs)
-
-    R->>D: router logits — select top-K experts per token, tokens split into per-expert buckets
-    D->>E: each GPU sends token-chunks to expert-owner GPUs, receives tokens assigned to its experts
-    E->>C: each GPU runs its expert FFN on received tokens
-    C->>O: each GPU sends expert outputs back to originating GPUs, originating GPU applies router weights
+flowchart TB
+    subgraph ROW1["Phases 1–2: route and dispatch"]
+        direction LR
+        R["① Route<br/>router scores each token against N experts;<br/>top-K winners selected<br/>(local compute — no comms)"]
+        D["② Dispatch AllToAll — MNNVL ~600 GB/s<br/>GPU_i sends token-chunks to expert-owner GPUs,<br/>receives tokens assigned to its experts"]
+        R --> D
+    end
+    subgraph ROW2["Phases 3–4: compute and combine"]
+        direction LR
+        E["③ Expert Compute<br/>each GPU runs its local expert FFN<br/>on received tokens"]
+        C["④ Combine AllToAll — MNNVL ~600 GB/s<br/>expert outputs returned to origin GPUs;<br/>router gate weights applied"]
+        E --> C
+    end
+    D --> E
 ```
 
 1. **Route:** the router scores each token against all N experts; top-K winners are selected. This is local compute — no communication yet.
