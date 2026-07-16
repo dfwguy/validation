@@ -717,26 +717,6 @@ The optimizer state row dominates training; the KV-cache row dominates inference
 
 ---
 
-<!-- INTERNAL_START -->
-**NVIDIA Internal (measured benchmark data — the basis for all "measured" figures above):**
-
-- [GB300 Performance Benchmarking — NVIDIA Internal (Confluence)](https://nvidia.atlassian.net/wiki/spaces/3P/pages/2075773370/GB300+Performance+Benchmarking) — C2C ~200 GB/s/dir, NCCL all-reduce >900 GB/s, all-to-all ~600 GB/s, STREAM Triad >7,000 GB/s.
-- [NCCL Collective Behavior and Performance GB300 — NVIDIA Internal (Google Drive)](https://drive.google.com/file/d/1pbf0_x67wIK7MqkKRIamLQjq4OyoARd0/view) — rail-optimized NCCL path behavior; ~900 GB/s NVLink vs ~100 GB/s NIC bus-bandwidth constants.
-<!-- INTERNAL_END -->
-
-**Public (architecture and theoretical specs):**
-
-- [GB200 NVL72 — NVIDIA](https://www.nvidia.com/en-us/data-center/gb200-nvl72/)
-- [GB300 NVL72 — NVIDIA](https://www.nvidia.com/en-us/data-center/gb300-nvl72/)
-- [NVIDIA GB200 NVL72 Delivers Trillion-Parameter LLM Training and Real-Time Inference — NVIDIA Technical Blog](https://developer.nvidia.com/blog/nvidia-gb200-nvl72-delivers-trillion-parameter-llm-training-and-real-time-inference/)
-- [System Hardware & Components — NVIDIA NVL72 AI Factory (docs.nvidia.com)](https://docs.nvidia.com/enterprise-reference-architectures/nvl72-ai-factory/latest/components.html)
-- [NVIDIA GB200 NVL Multi-Node Tuning Guide — NCCL (docs.nvidia.com)](https://docs.nvidia.com/multi-node-nvlink-systems/multi-node-tuning-guide/nccl.html)
-- [Enabling Fast Inference and Resilient Training with NCCL 2.27 — NVIDIA Technical Blog](https://developer.nvidia.com/blog/enabling-fast-inference-and-resilient-training-with-nccl-2-27/)
-- [DGX SuperPOD Reference Architecture for GB200 (docs.nvidia.com)](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-gb200/latest/)
-- [About GB200 and GB300 NVL72-powered instances — CoreWeave Docs](https://docs.coreweave.com/platform/instances/nvl72)
-
----
-
 ## 16. Parallelism dimensions — GPU count and memory
 
 Every parallelism setting directly multiplies the GPU count and partitions how model memory lands in HBM. For dense models the relationship is exact:
@@ -848,3 +828,23 @@ flowchart LR
 Memory per GPU for the expert layers: with N experts each of size E bytes and EP degree `ep`, each GPU holds N/ep × E bytes of expert weights. For a model with 256 experts of 1 GB each at EP=72: each GPU holds ~256/72 ≈ 3.6 experts worth of weight (~3.6 GB), compared to holding all 256 GB if EP=1. The non-expert parameters (attention, norms, embeddings) are still split only by TP × PP.
 
 The AllToAll volume (see [section 14](#14-mixture-of-experts--basics-and-the-alltostall-requirement)) scales with the number of tokens per GPU and K (experts per token), not with N. Keeping EP ≤ 72 ensures both the dispatch and combine AllToAlls stay on NVLink at ~600 GB/s busbw; crossing the rack boundary drops to ~100 GB/s — a 6× penalty that dominates MoE training step time.
+
+---
+
+<!-- INTERNAL_START -->
+**NVIDIA Internal (measured benchmark data — the basis for all "measured" figures above):**
+
+- [GB300 Performance Benchmarking — NVIDIA Internal (Confluence)](https://nvidia.atlassian.net/wiki/spaces/3P/pages/2075773370/GB300+Performance+Benchmarking) — C2C ~200 GB/s/dir, NCCL all-reduce >900 GB/s, all-to-all ~600 GB/s, STREAM Triad >7,000 GB/s.
+- [NCCL Collective Behavior and Performance GB300 — NVIDIA Internal (Google Drive)](https://drive.google.com/file/d/1pbf0_x67wIK7MqkKRIamLQjq4OyoARd0/view) — rail-optimized NCCL path behavior; ~900 GB/s NVLink vs ~100 GB/s NIC bus-bandwidth constants.
+<!-- INTERNAL_END -->
+
+**Public (architecture and theoretical specs):**
+
+- [GB200 NVL72 — NVIDIA](https://www.nvidia.com/en-us/data-center/gb200-nvl72/)
+- [GB300 NVL72 — NVIDIA](https://www.nvidia.com/en-us/data-center/gb300-nvl72/)
+- [NVIDIA GB200 NVL72 Delivers Trillion-Parameter LLM Training and Real-Time Inference — NVIDIA Technical Blog](https://developer.nvidia.com/blog/nvidia-gb200-nvl72-delivers-trillion-parameter-llm-training-and-real-time-inference/)
+- [System Hardware & Components — NVIDIA NVL72 AI Factory (docs.nvidia.com)](https://docs.nvidia.com/enterprise-reference-architectures/nvl72-ai-factory/latest/components.html)
+- [NVIDIA GB200 NVL Multi-Node Tuning Guide — NCCL (docs.nvidia.com)](https://docs.nvidia.com/multi-node-nvlink-systems/multi-node-tuning-guide/nccl.html)
+- [Enabling Fast Inference and Resilient Training with NCCL 2.27 — NVIDIA Technical Blog](https://developer.nvidia.com/blog/enabling-fast-inference-and-resilient-training-with-nccl-2-27/)
+- [DGX SuperPOD Reference Architecture for GB200 (docs.nvidia.com)](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-gb200/latest/)
+- [About GB200 and GB300 NVL72-powered instances — CoreWeave Docs](https://docs.coreweave.com/platform/instances/nvl72)
