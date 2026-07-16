@@ -836,6 +836,8 @@ The AllToAll volume (see [section 14](#14-mixture-of-experts--basics-and-the-all
 
 ---
 
+## References
+
 <!-- INTERNAL_START -->
 **NVIDIA Internal (measured benchmark data — the basis for all "measured" figures above):**
 
