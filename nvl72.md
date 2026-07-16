@@ -763,11 +763,16 @@ flowchart TB
     DP0 -. "gradient AllReduce — once per step" .- DP1
 ```
 
-The dashed edges between stages (`---`) are TP AllReduce/AllGather communications; these 4 GPUs must be on the same NVLink fabric. The `P2P activation send` between pipeline stages is point-to-point and can tolerate RDMA. The `gradient AllReduce` between DP replicas runs over RDMA+SHARP.
+The solid edges linking the four GPUs within each stage (`---`) are TP AllReduce/AllGather communications; those 4 GPUs must be on the same NVLink fabric. The `P2P activation send` between pipeline stages is point-to-point and can tolerate RDMA. The dashed `gradient AllReduce` between DP replicas runs over RDMA+SHARP.
 
 ### Memory per GPU — 70B model, TP=4, PP=2, DP=2
 
-A 70B-parameter model has ~140 GB of weights in BF16. With TP=4 and PP=2, each GPU owns 1/8 of those weights — **17.5 GB**. The optimizer state (two FP32 moment vectors for AdamW) is the dominant term; ZeRO shards it across the DP dimension to cut it down.
+A 70B-parameter model has ~140 GB of weights in BF16. With TP=4 and PP=2, each GPU owns 1/8 of those weights — **17.5 GB**. The optimizer state is the dominant term; ZeRO shards it across the DP dimension to cut it down.
+
+Two terms drive this table:
+
+- **AdamW** is the standard optimizer for LLM training. For every parameter it keeps two extra FP32 values between steps — a running mean (first moment) and variance (second moment) of the gradient. That is 8 bytes/param, ~2× the size of the BF16 weights themselves, which is why optimizer state dominates HBM.
+- **ZeRO** (Zero Redundancy Optimizer, from DeepSpeed; PyTorch FSDP and Megatron's distributed optimizer are equivalents) removes the redundancy of every DP replica holding a full copy of that state. It has three cumulative stages: **ZeRO-1** shards the optimizer state across the DP ranks, **ZeRO-2** additionally shards the gradients, and **ZeRO-3** additionally shards the parameters. Higher stages save more memory but add communication in the forward/backward pass.
 
 | Memory component | No ZeRO (DP=2, no sharding) | ZeRO-1 (optimizer sharded over DP=2) | ZeRO-3 (params + grads + optimizer sharded) |
 |---|---|---|---|
@@ -827,7 +832,7 @@ flowchart LR
 
 Memory per GPU for the expert layers: with N experts each of size E bytes and EP degree `ep`, each GPU holds N/ep × E bytes of expert weights. For a model with 256 experts of 1 GB each at EP=72: each GPU holds ~256/72 ≈ 3.6 experts worth of weight (~3.6 GB), compared to holding all 256 GB if EP=1. The non-expert parameters (attention, norms, embeddings) are still split only by TP × PP.
 
-The AllToAll volume (see [section 14](#14-mixture-of-experts--basics-and-the-alltostall-requirement)) scales with the number of tokens per GPU and K (experts per token), not with N. Keeping EP ≤ 72 ensures both the dispatch and combine AllToAlls stay on NVLink at ~600 GB/s busbw; crossing the rack boundary drops to ~100 GB/s — a 6× penalty that dominates MoE training step time.
+The AllToAll volume (see [section 14](#14-mixture-of-experts--basics-and-the-alltoall-requirement)) scales with the number of tokens per GPU and K (experts per token), not with N. Keeping EP ≤ 72 ensures both the dispatch and combine AllToAlls stay on NVLink at ~600 GB/s busbw; crossing the rack boundary drops to ~100 GB/s — a 6× penalty that dominates MoE training step time.
 
 ---
 
