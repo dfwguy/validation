@@ -734,3 +734,117 @@ The optimizer state row dominates training; the KV-cache row dominates inference
 - [Enabling Fast Inference and Resilient Training with NCCL 2.27 — NVIDIA Technical Blog](https://developer.nvidia.com/blog/enabling-fast-inference-and-resilient-training-with-nccl-2-27/)
 - [DGX SuperPOD Reference Architecture for GB200 (docs.nvidia.com)](https://docs.nvidia.com/dgx-superpod/reference-architecture-scalable-infrastructure-gb200/latest/)
 - [About GB200 and GB300 NVL72-powered instances — CoreWeave Docs](https://docs.coreweave.com/platform/instances/nvl72)
+
+---
+
+## 16. Parallelism dimensions — GPU count and memory
+
+Every parallelism setting directly multiplies the GPU count and partitions how model memory lands in HBM. For dense models the relationship is exact:
+
+**Total GPUs = TP × PP × DP**
+
+Each dimension has a distinct job and a distinct communication pattern:
+
+| Dimension | What it splits | Communication per step | Best fabric |
+|---|---|---|---|
+| **Tensor (TP)** | Weight matrices within each layer (column/row sharding) | AllReduce or AllGather+ReduceScatter every layer — high frequency | MNNVL (NVLink, in-rack) |
+| **Pipeline (PP)** | Layers across pipeline stages | P2P activation send at each stage boundary — once per micro-batch | RDMA tolerable (point-to-point) |
+| **Data (DP)** | Input data — full model shard is replicated | Gradient AllReduce once per step — overlaps with backward | RDMA + SHARP (cross-rack) |
+| **Expert (EP, MoE)** | Expert FFN weights across GPUs (EP ≤ DP) | AllToAll dispatch + combine every MoE FFN layer — very high | MNNVL (NVLink, in-rack) |
+
+### Worked example: TP=4, PP=2, DP=2 → 16 GPUs
+
+The 16 GPUs form a 3-D grid. DP replicates the TP×PP model block and feeds it different data. PP slices the model by layer depth into two sequential stages. TP shards each layer's weight matrices column- and row-wise across four GPUs within a stage.
+
+```mermaid
+flowchart TB
+    subgraph DP0["DP replica 0 — processes micro-batch A"]
+        subgraph S0A["PP stage 0 — layers 1 to L/2"]
+            direction LR
+            G0["GPU 0<br/>TP shard 0"] --- G1["GPU 1<br/>TP shard 1"] --- G2["GPU 2<br/>TP shard 2"] --- G3["GPU 3<br/>TP shard 3"]
+        end
+        subgraph S1A["PP stage 1 — layers L/2+1 to L"]
+            direction LR
+            G4["GPU 4<br/>TP shard 0"] --- G5["GPU 5<br/>TP shard 1"] --- G6["GPU 6<br/>TP shard 2"] --- G7["GPU 7<br/>TP shard 3"]
+        end
+        S0A -- "P2P activation send" --> S1A
+    end
+    subgraph DP1["DP replica 1 — processes micro-batch B, same weights"]
+        subgraph S0B["PP stage 0 — layers 1 to L/2"]
+            direction LR
+            G8["GPU 8<br/>TP shard 0"] --- G9["GPU 9<br/>TP shard 1"] --- G10["GPU 10<br/>TP shard 2"] --- G11["GPU 11<br/>TP shard 3"]
+        end
+        subgraph S1B["PP stage 1 — layers L/2+1 to L"]
+            direction LR
+            G12["GPU 12<br/>TP shard 0"] --- G13["GPU 13<br/>TP shard 1"] --- G14["GPU 14<br/>TP shard 2"] --- G15["GPU 15<br/>TP shard 3"]
+        end
+        S0B -- "P2P activation send" --> S1B
+    end
+    DP0 -. "gradient AllReduce — once per step" .- DP1
+```
+
+The dashed edges between stages (`---`) are TP AllReduce/AllGather communications; these 4 GPUs must be on the same NVLink fabric. The `P2P activation send` between pipeline stages is point-to-point and can tolerate RDMA. The `gradient AllReduce` between DP replicas runs over RDMA+SHARP.
+
+### Memory per GPU — 70B model, TP=4, PP=2, DP=2
+
+A 70B-parameter model has ~140 GB of weights in BF16. With TP=4 and PP=2, each GPU owns 1/8 of those weights — **17.5 GB**. The optimizer state (two FP32 moment vectors for AdamW) is the dominant term; ZeRO shards it across the DP dimension to cut it down.
+
+| Memory component | No ZeRO (DP=2, no sharding) | ZeRO-1 (optimizer sharded over DP=2) | ZeRO-3 (params + grads + optimizer sharded) |
+|---|---|---|---|
+| Parameters (BF16) | 17.5 GB | 17.5 GB | 8.75 GB |
+| Gradients (BF16) | 17.5 GB | 17.5 GB | 8.75 GB |
+| Optimizer states (AdamW FP32, 2 moments) | **70 GB** | **35 GB** | **35 GB** |
+| **Total (excluding activations)** | **105 GB** | **70 GB** | **52.5 GB** |
+
+ZeRO-1 halves the optimizer states by sharding across DP=2 at no extra forward-pass cost. ZeRO-3 further shards parameters and gradients but adds an AllGather before every layer in the forward pass.
+
+All three variants fit within one GB300 GPU's 288 GB HBM3e. A GB200 (192 GB) fits ZeRO-1 and ZeRO-3 comfortably; no-ZeRO (105 GB + activations) is tight and requires aggressive activation recomputation.
+
+```mermaid
+pie title HBM per GPU — 70B model, TP=4 PP=2 DP=2, ZeRO-1 (approximate)
+    "Parameters BF16 — 17.5 GB" : 17.5
+    "Gradients BF16 — 17.5 GB" : 17.5
+    "Optimizer states FP32 ZeRO-1 — 35 GB" : 35
+    "Activations recomputed — ~10 GB" : 10
+```
+
+Optimizer states dominate. Doubling DP (to DP=4) with ZeRO-1 would halve them again to ~17.5 GB/GPU while requiring 32 total GPUs — the trade is more GPUs for less per-GPU HBM pressure.
+
+### Configurations that fill one NVL72 rack (72 GPUs)
+
+Keep **TP × EP ≤ 72** so the highest-bandwidth collectives (TP AllReduce, EP AllToAll) stay on NVLink. Let PP and DP expand across racks over RDMA.
+
+| TP | PP | DP | Total GPUs | Typical use case |
+|---|---|---|---|---|
+| 8 | 9 | 1 | 72 | One model copy, deep pipeline — single-rack trillion-parameter training |
+| 8 | 1 | 9 | 72 | Pure TP + high DP — inference with 9× throughput replicas |
+| 4 | 2 | 9 | 72 | Balanced training on a 70–140B model; 9 DP replicas each at TP=4 PP=2 |
+| 4 | 1 | 18 | 72 | Small model, high DP — maximizes batch throughput |
+| 8 | 1 | 1 | 8 | Single TP group (1/9 of a rack) — small job or debugging |
+
+To scale beyond 72 GPUs: keep TP (and EP) inside one rack, and grow DP and PP across racks. A 4-rack setup with TP=4, PP=2, DP=36 uses 288 GPUs and runs 36 DP replicas — each replica is a 16-GPU TP×PP block on one rack, communicating only DP gradients across the RDMA fabric.
+
+### Adding EP for MoE
+
+Expert Parallel (EP) distributes the expert FFN weights across GPUs. In Megatron-LM style, EP carves into the DP dimension (EP ≤ DP): GPUs that would otherwise be DP replicas instead each own a disjoint slice of the expert pool and run AllToAll to exchange tokens.
+
+**Total GPUs = TP × PP × DP** — unchanged. EP just restructures what each GPU in the DP group is doing during the MoE layers.
+
+```mermaid
+flowchart LR
+    IN["Input activations<br/>(each GPU holds its local tokens)"]
+    subgraph EP_GROUP["EP group inside one DP replica (EP=4 shown)"]
+        direction TB
+        E0["GPU 0<br/>experts 0, 4, 8 … (N/4 total)"]
+        E1["GPU 1<br/>experts 1, 5, 9 …"]
+        E2["GPU 2<br/>experts 2, 6, 10 …"]
+        E3["GPU 3<br/>experts 3, 7, 11 …"]
+    end
+    OUT["Output activations<br/>(returned to origin GPUs)"]
+    IN -- "AllToAll dispatch<br/>MNNVL ~600 GB/s" --> EP_GROUP
+    EP_GROUP -- "AllToAll combine<br/>MNNVL ~600 GB/s" --> OUT
+```
+
+Memory per GPU for the expert layers: with N experts each of size E bytes and EP degree `ep`, each GPU holds N/ep × E bytes of expert weights. For a model with 256 experts of 1 GB each at EP=72: each GPU holds ~256/72 ≈ 3.6 experts worth of weight (~3.6 GB), compared to holding all 256 GB if EP=1. The non-expert parameters (attention, norms, embeddings) are still split only by TP × PP.
+
+The AllToAll volume (see [section 14](#14-mixture-of-experts--basics-and-the-alltostall-requirement)) scales with the number of tokens per GPU and K (experts per token), not with N. Keeping EP ≤ 72 ensures both the dispatch and combine AllToAlls stay on NVLink at ~600 GB/s busbw; crossing the rack boundary drops to ~100 GB/s — a 6× penalty that dominates MoE training step time.
