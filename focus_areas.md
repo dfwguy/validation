@@ -46,7 +46,7 @@ You bridge raw test output and structured data. The outcome is a reliable extrac
 
 ### Data Post-Processing (Data Lake)
 
-You make results queryable over time. The outcome is an aggregated store where parsed metrics from every run can be trended, compared across runs, and checked for regressions. You will need to learn how the data lake is structured, how results flow into it, and how to write queries that surface meaningful comparisons.
+You make results queryable over time and across deployments for us to gain a deeper understanding. The outcome is an aggregated store where parsed metrics from every run can be trended, compared across runs, and checked for regressions. You will need to learn how the data lake is structured, how results flow into it, and how to write queries that surface meaningful comparisons.
 
 ### Alerting & Threshold Management
 
