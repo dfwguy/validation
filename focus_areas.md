@@ -28,7 +28,7 @@ You understand the benchmarks that tell us whether the NVLink fabric is working 
 
 ### LLMs and Models
 
-You exercise the hardware the way real workloads will. The outcome is a confirmed result on whether the cluster can run a model training or inference job correctly — hitting expected throughput, producing numerically stable output. You will need to learn how to set up and run representative model workloads, what correct behavior looks like, and how to read the results as a signal of hardware health rather than model quality.
+You exercise the hardware the way real workloads will. The outcome is a confirmed result on whether the cluster can run a model training or inference job correctly — hitting expected throughput, producing numerically stable output. You will need to learn how to set up and run representative model workloads, what correct behavior looks like, and how to read the results as a signal of hardware health rather than model quality. You will need to understand TP, PP, DP, CP, and other tuning parameters for the models.
 
 ### System Architecture
 
