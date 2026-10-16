@@ -22,8 +22,11 @@
 
 - Rafael Marcelino Koike
 - Michelle Ramirez
-- Yugandhar Khair
 - New Hire
+
+## Documentation Tooling and Creation
+
+- Yugandhar Khair
 
 ## Auto Trigger Testing
 
