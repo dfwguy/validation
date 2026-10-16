@@ -28,9 +28,11 @@
 
 - Yugandhar Khair
 
-## Auto Trigger Testing
+## Auto Trigger Testing and Health Checks
 
 - Travis Drake
+- Dejaun Gayle
+- Tyler Race
 
 # SMEs and Teams
 
