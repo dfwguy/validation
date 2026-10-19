@@ -35,6 +35,14 @@
 - Tyler Race
 - Alyssa Sawyer
 
+## NVIS P2P
+
+- Harish Lakshminarasimhan
+
+## NVIS Data Lake
+
+- Harish Lakshminarasimhan
+
 # SMEs and Teams
 
 ## NCCL
