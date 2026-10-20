@@ -27,6 +27,7 @@
 ## Documentation Tooling and Creation
 
 - Yugandhar Khair
+- Michelle Ramirez
 
 ## Auto Trigger Testing and Health Checks
 
