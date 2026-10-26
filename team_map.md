@@ -18,16 +18,17 @@
 - Michael Echavarria
 - New Hire
 
-## Software Factory and Documentation
+## Software Factory
 
 - Rafael Marcelino Koike
 - Michelle Ramirez
-- New Hire
+- Travis Drake
 
-## Documentation Tooling and Creation
+## Documentation Tooling
 
 - Yugandhar Khair
 - Michelle Ramirez
+- Dejaun Gayle
 
 ## Auto Trigger Testing and Health Checks
 
@@ -43,6 +44,7 @@
 ## NVIS Data Lake
 
 - Harish Lakshminarasimhan
+- New Hire
 
 # SMEs and Teams
 
@@ -50,3 +52,7 @@
 
 - Rafael Marcelino Koike (SME)
 - Alyssa Sawyer
+
+## LLM Debug
+
+- Rafael Marcelino Koike
