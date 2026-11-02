@@ -12,6 +12,8 @@ We will aim to have someone from each of the three streams on every customer pro
 
 Team calls will be organized around these streams. The aim is to establish clear boundaries, collaborate where needed, and develop services that other streams can consume in the workflow.
 
+Project lists below retain the existing tool and SME teams. For projects shared across streams, each entry describes that stream’s responsibility; the listed team spans the project as a whole. Entries labeled **Proposed** are starting points for review. All projects support the shared Working on Projects stream.
+
 ## Working on Projects -- Testing, Validation, and Benchmarking
 
 ### Description
@@ -64,6 +66,13 @@ This is the group that will be focused on cluster bring-up as well as getting it
 - Auto Action Trigger
 - NVIS P2P
 
+### Projects
+
+- **NVIS Rack Status — API and data sources:** Rafael Marcelino Koike, Harish Lakshminarasimhan, Michael Echavarria.
+- **Observability — telemetry, Prometheus, and Victoria Metrics:** Harish Lakshminarasimhan, Michael Echavarria, New Hire.
+- **Auto Action Trigger — operation and data availability:** Travis Drake, Dejaun Gayle, Tyler Race, Alyssa Sawyer.
+- **NVIS P2P:** Harish Lakshminarasimhan.
+
 ### Interactions with Other Streams
 
 - Collaborate with User Interfaces, Triage, and Scripts
@@ -87,7 +96,7 @@ This is the group that makes the data visible and builds the interfaces we use i
 
 ### Who?
 
-Initial membership inferred from the tool rosters below; people may work across streams.
+Initial membership inferred from the project teams below; people may work across streams.
 
 - Rafael Marcelino Koike
 - Michael Echavarria
@@ -108,6 +117,14 @@ Initial membership inferred from the tool rosters below; people may work across 
 - Auto Action Trigger - testing and conformance workflows
 - CLIs, WebUIs, and MCPs for validation workflows
 - Triage automation scripts and test workflows
+
+### Projects
+
+- **NVIS Rack Status — WebUI:** Rafael Marcelino Koike, Harish Lakshminarasimhan, Michael Echavarria.
+- **Observability — Grafana and visualization:** Harish Lakshminarasimhan, Michael Echavarria, New Hire.
+- **Software Factory (Proposed)** — automation of test workflows: Rafael Marcelino Koike, Michelle Ramirez, Travis Drake.
+- **Documentation Tooling (Proposed)** — publishing and accessing team documentation: Yugandhar Khair, Michelle Ramirez, Dejaun Gayle.
+- **Auto Action Trigger — Testing and Conformance:** test selection and triage automation: Travis Drake, Dejaun Gayle, Tyler Race, Alyssa Sawyer.
 
 ### Interactions with Other Streams
 
@@ -132,7 +149,7 @@ This is the group that learns within and across projects where we should focus f
 
 ### Who?
 
-Initial membership inferred from the NVIS Data Lake and SME rosters below; people may work across streams. Performance Engineering and Data Engineering are currently light on staffing; the staffing plan remains to be determined.
+Initial membership inferred from the NVIS Data Lake and SME project teams below; people may work across streams. Performance Engineering and Data Engineering are currently light on staffing; the staffing plan remains to be determined.
 
 - Harish Lakshminarasimhan
 - New Hire
@@ -144,8 +161,15 @@ Initial membership inferred from the NVIS Data Lake and SME rosters below; peopl
 
 - NVIS Data Lake
 - Charts and Jupyter notebooks
-- NCCL, LLM Debug, and Network Performance expertise from the SME groups below
+- NCCL, LLM Debug, and Network Performance expertise from the project teams below
 - Interfaces, scripts, and tests provided by User Interfaces, Triage, and Scripts
+
+### Projects
+
+- **NVIS Data Lake:** Harish Lakshminarasimhan, New Hire.
+- **NCCL (Proposed)** — performance expertise and collaboration with User Interfaces, Triage, and Scripts on test selection and tuning: Rafael Marcelino Koike (SME), Alyssa Sawyer.
+- **LLM Debug (Proposed)** — investigation of workload behavior and low performance during projects: Rafael Marcelino Koike.
+- **Network Performance (Proposed)** — performance investigations and collaboration with Installation and Data on network readiness or telemetry: Bryan Reese (Temporary).
 
 ### Interactions with Other Streams
 
@@ -153,84 +177,3 @@ Initial membership inferred from the NVIS Data Lake and SME rosters below; peopl
 - Feed findings back to User Interfaces, Triage, and Scripts to improve test selection, tuning, and triage automation.
 - Support Working on Projects with performance investigations and decisions during engagements.
 - Collaborate with DRE.
-
-# Specific Tools, Streams it Belongs to, and Teams
-
-The existing tool rosters remain the teams for those tools. Stream mappings describe responsibility within a tool; a roster does not assign every person to every part of that tool. Mappings labeled **Proposed** are starting points for review. All tools support the shared Working on Projects stream.
-
-## NVIS Rack Status
-
-Streams: Installation and Data (API and data sources); User Interfaces, Triage, and Scripts (WebUI).
-
-- Rafael Marcelino Koike
-- Harish Lakshminarasimhan
-- Michael Echavarria
-
-## Observability
-
-Streams: Installation and Data (telemetry, Prometheus, and Victoria Metrics); User Interfaces, Triage, and Scripts (Grafana and visualization).
-
-- Harish Lakshminarasimhan
-- Michael Echavarria
-- New Hire
-
-## Software Factory
-
-**Proposed stream:** User Interfaces, Triage, and Scripts, supporting automation of test workflows.
-
-- Rafael Marcelino Koike
-- Michelle Ramirez
-- Travis Drake
-
-## Documentation Tooling
-
-**Proposed stream:** User Interfaces, Triage, and Scripts, supporting how the team publishes and accesses documentation.
-
-- Yugandhar Khair
-- Michelle Ramirez
-- Dejaun Gayle
-
-## Auto Action Trigger -- Testing and Conformance
-
-Streams: Installation and Data (running Auto Trigger and making its data available); User Interfaces, Triage, and Scripts (test selection and triage automation).
-
-- Travis Drake
-- Dejaun Gayle
-- Tyler Race
-- Alyssa Sawyer
-
-## NVIS P2P
-
-Stream: Installation and Data.
-
-- Harish Lakshminarasimhan
-
-## NVIS Data Lake
-
-Stream: Performance Engineering and Data Engineering.
-
-- Harish Lakshminarasimhan
-- New Hire
-
-# SMEs and Teams
-
-These groups provide expertise to customer projects and the streams as needed. The proposed mappings below inform the initial Performance Engineering and Data Engineering roster; they do not replace the existing SME groups.
-
-## NCCL
-
-**Proposed stream:** Performance Engineering and Data Engineering, collaborating with User Interfaces, Triage, and Scripts on test selection and tuning.
-
-- Rafael Marcelino Koike (SME)
-- Alyssa Sawyer
-
-## LLM Debug
-
-**Proposed stream:** Performance Engineering and Data Engineering, supporting investigation of workload behavior and low performance during projects.
-
-- Rafael Marcelino Koike
-
-## Network Performance
-
-**Proposed stream:** Performance Engineering and Data Engineering, collaborating with Installation and Data when investigations involve network readiness or telemetry.
-
-- Bryan Reese (Temporary)
