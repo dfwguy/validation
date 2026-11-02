@@ -1,18 +1,26 @@
 # Overall Leads
 
+## Description
+
+Working across projects, the overall leads are expected to have an overall idea of how everything works together. They will be the best point of contact for questions on scheduling and resolving technical questions, either by knowing the answer or knowing where to go to get the answer.
+
+Expect the overall leads to have the area they are the SME in.
+
+## Who
+
 - Travis Drake
 - Harish Lakshminarasimhan
 - Rafael Marcelino Koike
 
 # Project Streams -- Teams and Descriptions
 
-We are using Team Topologies to organize three teams around the streams below. Working on Projects is the fourth stream, shared by everyone. People can work on specific tools and move between streams as we learn what each project requires.
+We are using [Team Topologies](https://itrevolution.com/wp-content/uploads/2022/06/TTOP_audio-excerpt_072419_r1.pdf) to organize three teams around the streams below. Working on Projects is the fourth stream, shared by everyone. People can work on specific tools and move between streams as we learn what each project requires.
 
-We will aim to have someone from each of the three streams on every customer project. Performance Engineering and Data Engineering are currently light on staffing, and a plan to address that is still to be determined. We will adjust responsibilities and boundaries as the work develops.
+We will aim to have someone from each of the three streams on every customer project. We will adjust responsibilities and boundaries as the work develops.
 
 Team calls will be organized around these streams. The aim is to establish clear boundaries, collaborate where needed, and develop services that other streams can consume in the workflow.
 
-People are listed under each stream’s “Who?” section. For projects shared across streams, each project entry describes that stream’s responsibility. Initial stream membership is inferred from the previous tool and SME rosters; people may work across streams. Entries labeled **Proposed** are starting points for review. All projects support the shared Working on Projects stream.
+People are listed under each stream’s “Who?” section. For projects shared across streams, each project entry describes that stream’s responsibility. All projects support the shared Working on Projects stream.
 
 ## Working on Projects -- Testing, Validation, and Benchmarking
 
@@ -28,12 +36,6 @@ This is our main job and we will all be doing doing it. As things evolve, we wil
 
 The whole stack
 
-### Interactions with Other Streams
-
-- Work with Installation and Data to get the cluster, access, and data ready for testing.
-- Use the interfaces, scripts, and tests provided by User Interfaces, Triage, and Scripts to run tests and perform initial triage.
-- Work with Performance Engineering and Data Engineering to investigate low performance, tune tests, and interpret results.
-
 ## Installation and Data
 
 ### Description
@@ -42,27 +44,22 @@ This is the group that will be focused on cluster bring-up as well as getting it
 
 #### Project Responsibility
 
-- You will not own Grafana, but you will own Prometheus and Victoria Metrics.
-- You will not own NVIS Rack Status but you will own the API that sits beneath it
-  - Future item, NVIS Rack Status should split into at least two project, with the WebUI being separate from the API
-  - Auto Trigger results will be on the filesystem but eventually should be consumed through the Rack Status API
-- You will ensure Auto Trigger is running and its data is available
-- You will own NVIS P2P and ensuring that the containers and any other files we need are distributed
+- You will own telemetry collection, Prometheus, and Victoria Metrics, and provide data for Grafana dashboards owned by User Interfaces, Triage, and Scripts.
+- You will own the NVIS Rack Status API and data sources. User Interfaces, Triage, and Scripts owns the WebUI. This ownership split is separate from the proposed future split of the API and WebUI into separate projects.
+  - Auto Action Trigger results are available on the filesystem; access through the Rack Status API is planned.
+- You will own getting Auto Action Trigger installed and running on the cluster and making its results available. User Interfaces, Triage, and Scripts owns the tests and conformance testing (formerly health checks) that it runs.
+- You will own NVIS P2P and distribution of containers and other files needed for testing.
 - You will collaborate across NVIS, including functions such as CVT, to make the data needed for validation available.
-- This stream ends in an API that provides consistent access to the data for other streams.
+- You will provide source data and consistent API access for interfaces and analysis. Performance Engineering and Data Engineering owns ingestion into the data lake using Parquet files exported from the cluster, along with the data lake and analysis built from it.
+- This stream provides consistent API access to cluster data and supports the source-data handoff for Parquet-based data lake ingestion.
 
 ### Who?
 
 - Harish Lakshminarasimhan
-- Rafael Marcelino Koike
 - Michael Echavarria
-- New Hire
-- Travis Drake
-- Dejaun Gayle
-- Tyler Race
-- Alyssa Sawyer
+- Michelle Ramirez
 
-### Tools
+### Tools and Capabilities
 
 - Telemetry consumed for Observability
   - Data stores
@@ -75,111 +72,110 @@ This is the group that will be focused on cluster bring-up as well as getting it
 
 ### Projects
 
-- **NVIS Rack Status — API and data sources**.
-- **Observability — telemetry, Prometheus, and Victoria Metrics**.
-- **Auto Action Trigger — operation and data availability**.
-- **NVIS P2P**.
+- **NVIS Rack Status** — own the API and data sources; separate API and WebUI projects are proposed.
+- **Observability** — collect telemetry and operate Prometheus and Victoria Metrics for downstream visualization and analysis.
+- **Auto Action Trigger** — own installation and operation on the cluster and make test results available; User Interfaces, Triage, and Scripts owns the tests and conformance testing it runs.
+- **NVIS P2P** — distribute containers and other files needed for testing.
 
 ### Interactions with Other Streams
 
-- Collaborate with User Interfaces, Triage, and Scripts
-- Provide the API and data service consumed by User Interfaces, Triage, and Scripts.
+- Provide APIs and data consumed by User Interfaces, Triage, and Scripts; incorporate feedback on data access and completeness.
+- Provide source data for Performance Engineering and Data Engineering, which owns data lake ingestion using Parquet files exported from the cluster; collaborate on network readiness, telemetry, and data needed for performance investigations and cross-project analysis.
 - Collaborate with AIC and across NVIS, including Ethernet, InfiniBand, NVLink Switches, and CVT, on cluster readiness and data availability.
-- Support Working on Projects by ensuring the cluster and data are ready for testing.
+- Support Working on Projects by ensuring the cluster and data are ready for testing and resolving readiness, installation, and data availability issues identified during initial triage.
 
 ## User Interfaces, Triage, and Scripts
 
 ### Description
 
-This is the group that makes the data visible and builds the interfaces we use in our work. You will own scripts that automate triage, determine which tests we need to run, and ensure those tests are optimal. You will use the API and data service provided by Installation and Data to build a service that Performance Engineering and Data Engineering can consume.
+This is the group that makes the data visible and builds the interfaces we use in our work. You will own the tests, conformance testing (formerly health checks), and scripts that automate triage. You will select and maintain test workflows, incorporating performance findings from Performance Engineering and Data Engineering. You will use the APIs and data provided by Installation and Data to deliver interfaces, scripts, and tests for project teams and Performance Engineering and Data Engineering.
 
 #### Project Responsibility
 
 - You will own Grafana dashboards and the visualization of telemetry provided by Installation and Data.
 - You will own the NVIS Rack Status WebUI and consume the API provided by Installation and Data.
 - You will build and maintain scripts that automate triage and help the team run the right tests.
-- You will determine which tests we need to run and ensure they are optimal, incorporating findings from Performance Engineering and Data Engineering.
+- You will own test implementation, selection, and configuration, including conformance testing. You will incorporate tuning recommendations and performance validation from Performance Engineering and Data Engineering.
+- Tests can live in separate repositories and be pulled into the project that runs them, including Auto Action Trigger. Test ownership stays with this stream regardless of repository location.
+- For the proposed Software Factory project, the intended scope is automation of test workflows.
+- For the proposed Documentation Tooling project, the intended scope is publishing and accessing team documentation.
 - This stream ends in user interfaces, including CLIs, WebUIs, and MCPs.
 
 ### Who?
 
-- Rafael Marcelino Koike
-- Harish Lakshminarasimhan
-- Michael Echavarria
-- Michelle Ramirez
 - Travis Drake
 - Yugandhar Khair
 - Dejaun Gayle
-- Tyler Race
-- Alyssa Sawyer
-- New Hire
 
-### Tools
+### Tools and Capabilities
 
 - Grafana
 - NVIS Rack Status - WebUI
-- Software Factory
-- Documentation Tooling
-- Auto Action Trigger - testing and conformance workflows
+- Software Factory (Proposed)
+- Documentation Tooling (Proposed)
+- Tests and conformance workflows run by Auto Action Trigger
 - CLIs, WebUIs, and MCPs for validation workflows
 - Triage automation scripts and test workflows
 
 ### Projects
 
-- **NVIS Rack Status — WebUI**.
-- **Observability — Grafana and visualization**.
+- **NVIS Rack Status** — own the WebUI and consume the API provided by Installation and Data; separate API and WebUI projects are proposed.
+- **Observability** — own Grafana dashboards and visualization of telemetry provided by Installation and Data.
 - **Software Factory (Proposed)** — automation of test workflows.
 - **Documentation Tooling (Proposed)** — publishing and accessing team documentation.
-- **Auto Action Trigger — Testing and Conformance:** test selection and triage automation.
+- **Tests and Conformance** — own tests, conformance testing, test selection and configuration, and triage automation, including workflows run by Auto Action Trigger. Tests may be maintained in separate repositories and pulled into the project that runs them.
 
 ### Interactions with Other Streams
 
 - Consume the API and data service provided by Installation and Data.
-- Provide interfaces, scripts, and tests as a service to Performance Engineering and Data Engineering.
-- Support Working on Projects with interfaces for running tests, reviewing results, and performing initial triage.
-- Collaborate with RoW to ensure we are aligned.
+- Provide interfaces, scripts, and tests to Performance Engineering and Data Engineering; incorporate its findings into test selection, configuration, and triage automation.
+- Support Working on Projects with interfaces for running tests, reviewing results, and performing initial triage. Project teams perform initial triage; this stream resolves issues in interfaces, tests, conformance workflows, and automation.
+- Collaborate with Rest of World (RoW) to ensure alignment.
 
 ## Performance Engineering and Data Engineering
 
 ### Description
 
-This is the group that learns within and across projects where we should focus fixes and how to dial in tests so they pass. You will be the primary source of help for understanding tests that run but produce low performance. You will turn results into evidence that supports decisions during customer engagements and builds our understanding across projects.
+This is the group that learns within and across projects where we should focus fixes and how to tune systems and test configurations to meet expected performance. You will be the primary source of help for understanding tests that run but produce low performance. You will turn results into evidence that supports decisions during customer engagements and builds our understanding across projects.
 
 #### Project Responsibility
 
-- You will investigate low performance and help the project team understand what the test results mean.
-- You will identify where to focus fixes and how to tune tests to meet expected performance.
-- You will learn across projects and make results available for analysis and comparison through the data lake.
+- You will investigate low performance and help the project team understand what the test results mean during a customer engagement.
+- You will identify where to focus fixes, recommend system and test configuration changes, and validate their performance impact. User Interfaces, Triage, and Scripts owns implementation of changes to shared tests and workflows.
+- You will own the NVIS Data Lake, ingestion into it using Parquet files exported from the cluster, and cross-project analysis. Installation and Data provides the source data and consistent API access for cluster workflows.
+- You will develop documented analysis methods and reusable sample functions for working with data on the cluster and in the data lake.
 - You will produce charts, Jupyter notebooks, decisions during engagements, and whitepapers that explain findings and guide future work.
 - This stream ends in a data lake and the analysis and decisions built from it.
 
 ### Who?
 
-Performance Engineering and Data Engineering are currently light on staffing; the staffing plan remains to be determined.
-
-- Harish Lakshminarasimhan
-- New Hire
-- Rafael Marcelino Koike (NCCL SME)
+- Tyler Race
+- Rafael Marcelino Koike
 - Alyssa Sawyer
 - Bryan Reese (Temporary)
 
-### Tools
+### Tools and Capabilities
 
 - NVIS Data Lake
+- Parquet files exported from the cluster for data lake ingestion
 - Charts and Jupyter notebooks
 - NCCL, LLM Debug, and Network Performance expertise within the stream
 - Interfaces, scripts, and tests provided by User Interfaces, Triage, and Scripts
 
 ### Projects
 
-- **NVIS Data Lake**.
-- **NCCL (Proposed)** — performance expertise and collaboration with User Interfaces, Triage, and Scripts on test selection and tuning.
-- **LLM Debug (Proposed)** — investigation of workload behavior and low performance during projects.
-- **Network Performance (Proposed)** — performance investigations and collaboration with Installation and Data on network readiness or telemetry.
+- **NVIS Data Lake** — own ingestion of Parquet files exported from the cluster and the data lake used for cross-project analysis and comparison.
+- **Documented Analysis and Sample Functions** — produce repeatable analysis methods, example notebooks, and reusable functions for cluster and data lake analysis beyond Grafana dashboards.
+
+#### Skill Areas We Need to Scale
+
+- **NCCL** — performance expertise and collaboration with User Interfaces, Triage, and Scripts on test selection and tuning.
+- **LLM Debug** — investigation of workload behavior and low performance during projects.
+- **Network Performance** — performance investigations and collaboration with Installation and Data on network readiness or telemetry.
 
 ### Interactions with Other Streams
 
-- Consume the service provided by User Interfaces, Triage, and Scripts.
-- Feed findings back to User Interfaces, Triage, and Scripts to improve test selection, tuning, and triage automation.
-- Support Working on Projects with performance investigations and decisions during engagements.
-- Collaborate with DRE.
+- Consume interfaces, scripts, and tests provided by User Interfaces, Triage, and Scripts; return findings and tuning recommendations to improve test selection, configuration, and triage automation.
+- Ingest Parquet files exported from the cluster into the data lake, using source data provided by Installation and Data; collaborate on network readiness, telemetry, and data needed for performance investigations and cross-project analysis.
+- Support Working on Projects with performance investigations and decisions during engagements. Project teams perform initial triage and bring tests that run but produce low performance to this stream for deeper investigation.
+- Collaborate with Deployment Readiness Engineering (DRE).
