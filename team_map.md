@@ -22,11 +22,19 @@ Team calls will be organized around these streams. The aim is to establish clear
 
 People are listed under each stream’s “Who?” section. For projects shared across streams, each project entry describes that stream’s responsibility. All projects support the shared Working on Projects stream.
 
+## What Ownership Means
+
+Throughout this document, **ownership means a stream is responsible for the outcomes and review of its area**. The owning stream makes sure the area meets its users' needs, coordinates decisions and dependencies, reviews relevant changes, and follows through on issues and improvements. It is the point of contact when the outcome needs attention.
+
+Ownership does not mean that only members of that stream can do the work. Anyone on the team can contribute implementation, fixes, documentation, or operational work, including with AI assistance. The owning stream remains responsible for reviewing relevant contributions and ensuring the outcome works; contributors and other affected streams remain responsible for collaborating and bringing their expertise to the work. For shared projects, each stream owns the outcomes and reviews within its stated scope, and the streams coordinate changes that cross those boundaries.
+
+Working on Projects remains a responsibility shared by everyone. Stream ownership supports that work; it does not remove the project team's responsibility to run tests and perform initial triage.
+
 ## Shared Repository and Review Ownership
 
 We intend to bring NVIS Rack Status and Auto Action Trigger into one repository, with clear directories for the API and data access, user interfaces, shared validation tests and verdicts, and cluster-side execution. This is a target model; the existing repositories and integration remain in place until migration is planned and verified. A shared repository does not require a single service, release, or deployment: the API, user interfaces, and cluster-side execution can retain independent build and deployment paths.
 
-Each area has a primary owning stream. GitLab directory ownership and merge request approval rules should require review from the responsible stream for changes in its area. Changes across areas need review from each affected stream. Installation and Data reviews changes to API contracts and source-data schemas; the consuming streams also review changes that affect their use. Ownership rules must cover contracts and schemas wherever they live, not just files in an API directory. Verify that GitLab approval settings enforce the intended reviews, including for changes spanning multiple areas. AI-assisted changes follow the same review process.
+Each area has a primary owning stream responsible for its outcomes and review. GitLab directory ownership and merge request approval rules should require review from the responsible stream for changes in its area. Changes across areas need review from each affected stream. Installation and Data reviews changes to API contracts and source-data schemas; the consuming streams also review changes that affect their use. Ownership rules must cover contracts and schemas wherever they live, not just files in an API directory. Verify that GitLab approval settings enforce the intended reviews, including for changes spanning multiple areas. AI-assisted changes follow the same review process.
 
 Installation and Data owns the versioned source-data API and its contract. User Interfaces, Triage, and Scripts and Performance Engineering and Data Engineering are consumers and help define their data and compatibility requirements. Maintain compatibility and migration guidance for API changes because components and consumers may be deployed on different schedules. Performance Engineering and Data Engineering continues to own data lake ingestion and analysis.
 
@@ -52,7 +60,7 @@ The whole stack
 
 ### Description
 
-This is the group that will be focused on cluster bring-up as well as getting it so we have all of the data available for other teams. This will be a cross functional team that has to work with teams such as Ethernet, InfiniBand, and NVLink Switches in order to get OpenTelemetry and other data available for teams to consume. You will be the vanguard on making sure the cluster is ready for us to begin testing on and you will collaborate with the AIC team to ensure everyone else can login and we have enough resources (space on filesystem, CPUs, RAM, and network.)
+This stream is responsible for the outcomes and review of cluster bring-up and making data available for other teams. This will be a cross functional team that has to work with teams such as Ethernet, InfiniBand, and NVLink Switches in order to get OpenTelemetry and other data available for teams to consume. You will be the vanguard on making sure the cluster is ready for us to begin testing on and you will collaborate with the AIC team to ensure everyone else can login and we have enough resources (space on filesystem, CPUs, RAM, and network.)
 
 #### Project Responsibility
 
@@ -100,7 +108,7 @@ This is the group that will be focused on cluster bring-up as well as getting it
 
 ### Description
 
-This is the group that makes the data visible and builds the interfaces we use in our work. You will own the tests, conformance testing (formerly health checks), and scripts that automate triage. You will select and maintain test workflows, incorporating performance findings from Performance Engineering and Data Engineering. You will use the APIs and data provided by Installation and Data to deliver interfaces, scripts, and tests for project teams and Performance Engineering and Data Engineering.
+This stream is responsible for the outcomes and review of the interfaces, tests, and triage automation we use in our work. You will own the tests, conformance testing (formerly health checks), and scripts that automate triage. You will select and maintain test workflows, incorporating performance findings from Performance Engineering and Data Engineering. You will use the APIs and data provided by Installation and Data to deliver interfaces, scripts, and tests for project teams and Performance Engineering and Data Engineering.
 
 #### Project Responsibility
 
@@ -141,19 +149,19 @@ This is the group that makes the data visible and builds the interfaces we use i
 
 - Consume the API and data service provided by Installation and Data.
 - Provide interfaces, scripts, and tests to Performance Engineering and Data Engineering; incorporate its findings into test selection, configuration, and triage automation.
-- Support Working on Projects with interfaces for running tests, reviewing results, and performing initial triage. Project teams perform initial triage; this stream resolves issues in interfaces, tests, conformance workflows, and automation.
+- Support Working on Projects with interfaces for running tests, reviewing results, and performing initial triage. Project teams perform initial triage; this stream is responsible for seeing issues in interfaces, tests, conformance workflows, and automation through to resolution.
 - Collaborate with Rest of World (RoW) to ensure alignment.
 
 ## Performance Engineering and Data Engineering
 
 ### Description
 
-This is the group that learns within and across projects where we should focus fixes and how to tune systems and test configurations to meet expected performance. You will be the primary source of help for understanding tests that run but produce low performance. You will turn results into evidence that supports decisions during customer engagements and builds our understanding across projects.
+This stream is responsible for the outcomes and review of performance engineering, data engineering, and cross-project analysis, including learning where to focus fixes and how to tune systems and test configurations to meet expected performance. You will be the primary source of help for understanding tests that run but produce low performance. You will turn results into evidence that supports decisions during customer engagements and builds our understanding across projects.
 
 #### Project Responsibility
 
 - You will investigate low performance and help the project team understand what the test results mean during a customer engagement.
-- You will identify where to focus fixes, recommend system and test configuration changes, and validate their performance impact. User Interfaces, Triage, and Scripts owns implementation of changes to shared tests and workflows.
+- You will identify where to focus fixes, recommend system and test configuration changes, and validate their performance impact. User Interfaces, Triage, and Scripts is responsible for the outcomes and review of changes to shared tests and workflows; members of any stream may contribute those changes.
 - You will own the NVIS Data Lake, ingestion into it using Parquet files exported from the cluster, and cross-project analysis. Installation and Data provides the source data and consistent API access for cluster workflows.
 - You will develop documented analysis methods and reusable sample functions for working with data on the cluster and in the data lake.
 - You will produce charts, Jupyter notebooks, decisions during engagements, and whitepapers that explain findings and guide future work.
