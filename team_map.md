@@ -1,3 +1,47 @@
+# Team Ownership and Interfaces
+
+All projects and documentation are moving into the **CMODS** monorepo. Everyone owns documentation and can contribute across team boundaries; ownership establishes accountability and required reviews.
+
+| Team | Owns |
+|---|---|
+| **Installation and Data** | Cluster installation and readiness; database and API availability; telemetry collection and stores; Rack Status API and data sources; Auto Action Trigger installation and operation; NVIS P2P and distribution of testing assets. |
+| **Interfaces** (User Interfaces, Triage, and Scripts) | End-to-end workflow health: observability works, conformance is followed, agents run, and issues get resolved by their action owners. Grafana dashboards, Rack Status WebUI, shared test implementations and workflows, triage automation, and CLIs/WebUIs/MCPs. **CMODS CI/CD for software and documentation**, including checks, builds, releases, deployment, and publishing. |
+| **Performance Engineering and Data Engineering** | Ensuring tests pass and numbers make sense; performance investigations, tuning recommendations, and validation; experiments when capacity allows; data lake ingestion and analysis; reusable analysis methods, notebooks, charts, and findings. |
+
+The diagram shows the main handoffs and collaborations. All three teams share customer project work, initial triage, and documentation. Interfaces coordinates and verifies issue resolution with the responsible action owners without owning every fix.
+
+```mermaid
+flowchart TB
+    subgraph team["Our team — shared CMODS monorepo and documentation"]
+        install["Installation and Data"]
+        interfaces["Interfaces<br/>User Interfaces, Triage, and Scripts<br/>Software and documentation CI/CD"]
+        performance["Performance Engineering<br/>and Data Engineering"]
+        projects["Shared customer project work<br/>Testing, initial triage, and documentation"]
+
+        install -->|"APIs, telemetry, and execution infrastructure"| interfaces
+        interfaces -->|"Data requirements and workflow issues"| install
+        install -->|"Source data and Parquet exports"| performance
+        performance -->|"Readiness and telemetry needs"| install
+        interfaces -->|"Interfaces, scripts, and tests"| performance
+        performance -->|"Findings, tuning, and threshold reviews"| interfaces
+        install ---|"Installation and data readiness"| projects
+        interfaces ---|"End-to-end workflow and issue follow-through"| projects
+        performance ---|"Passing tests and credible results"| projects
+    end
+
+    subgraph external["Groups outside our team"]
+        aic["AIC"]
+        nvis["Ethernet, InfiniBand,<br/>NVLink Switches, and CVT"]
+        row["Rest of World — RoW"]
+        dre["Deployment Readiness Engineering — DRE"]
+    end
+
+    aic <-->|"Cluster access and resource readiness"| install
+    nvis <-->|"Network readiness, telemetry, and validation data"| install
+    row <-->|"Alignment"| interfaces
+    dre <-->|"Performance and readiness collaboration"| performance
+```
+
 # Overall Leads
 
 ## Description
@@ -18,7 +62,7 @@ We are using [Team Topologies](https://itrevolution.com/wp-content/uploads/2022/
 
 We will aim to have someone from each of the three streams on every customer project. We will adjust responsibilities and boundaries as the work develops.
 
-Team calls will be organized around these streams. The aim is to establish clear boundaries, collaborate where needed, and develop services that other streams can consume in the workflow.
+Team calls will be organized around these streams. The aim is to make responsibilities and review boundaries clear, collaborate where needed, and develop services that other streams can consume in the workflow. These boundaries trigger reviews and identify who is accountable; they are not strict firewalls around where people can work.
 
 People are listed under each stream’s “Who?” section. For projects shared across streams, each project entry describes that stream’s responsibility. All projects support the shared Working on Projects stream.
 
@@ -30,15 +74,29 @@ Ownership does not mean that only members of that stream can do the work. Anyone
 
 Working on Projects remains a responsibility shared by everyone. Stream ownership supports that work; it does not remove the project team's responsibility to run tests and perform initial triage.
 
-## Shared Repository and Review Ownership
+Documentation is owned by everyone. All streams are responsible for keeping documentation accurate and current as they contribute and make changes, with subject-matter review from the affected streams. User Interfaces, Triage, and Scripts owns the CMODS CI/CD process for both documentation and software.
 
-We intend to bring NVIS Rack Status and Auto Action Trigger into one repository, with clear directories for the API and data access, user interfaces, shared validation tests and verdicts, and cluster-side execution. This is a target model; the existing repositories and integration remain in place until migration is planned and verified. A shared repository does not require a single service, release, or deployment: the API, user interfaces, and cluster-side execution can retain independent build and deployment paths.
+CMODS will be our single source of truth for all projects and documentation, easy for people to update and supported by a known end-to-end process. The shared workflow should make it clear how to propose a change, which reviews it needs, how it is validated and put into use, and who follows through on outstanding actions. Keep the process, ownership, and action status documented alongside the shared work so people can contribute with minimal friction.
+
+During each project, the streams are accountable for the following outcomes:
+
+- **Installation and Data:** the installation works, and the databases and APIs needed by the project are available.
+- **User Interfaces, Triage, and Scripts (Interfaces):** the workflow works end to end: observability is working, conformance is being followed, agents are running, and identified issues are actually getting fixed. This stream coordinates follow-through with the responsible owners; it does not own implementing every fix.
+- **Performance Engineering and Data Engineering:** tests are passing and the reported numbers make sense. When project capacity allows, this stream also runs experiments to improve performance or gather data that deepens our understanding.
+
+Each stream owns understanding its part of the workflow and ensuring its specific actions are completed. Track issues with an explicit action owner and verify resolution across the workflow. Anyone may contribute across these areas, with the affected streams providing the required reviews.
+
+## CMODS Monorepo and Review Ownership
+
+We are moving all projects and documentation into one monorepo named **CMODS**. This includes NVIS Rack Status, Auto Action Trigger, NVIS P2P, observability, data lake tooling, analysis code and notebooks, test workflows, and team and project documentation, including this team map. New projects and their documentation will also live in CMODS.
+
+CMODS will organize these areas into clear directories, with documentation maintained alongside the work it describes. Documentation ownership is shared by everyone, and affected streams provide subject-matter reviews for both code and documentation. User Interfaces, Triage, and Scripts owns the repository's CI/CD process for software and documentation, including automated checks, builds, releases, deployment, and documentation publishing. Components can retain independent build, release, and deployment paths within the monorepo. Migrate existing projects and documentation into CMODS incrementally, verifying behavior and updating references as each area moves.
 
 Each area has a primary owning stream responsible for its outcomes and review. GitLab directory ownership and merge request approval rules should require review from the responsible stream for changes in its area. Changes across areas need review from each affected stream. Installation and Data reviews changes to API contracts and source-data schemas; the consuming streams also review changes that affect their use. Ownership rules must cover contracts and schemas wherever they live, not just files in an API directory. Verify that GitLab approval settings enforce the intended reviews, including for changes spanning multiple areas. AI-assisted changes follow the same review process.
 
 Installation and Data owns the versioned source-data API and its contract. User Interfaces, Triage, and Scripts and Performance Engineering and Data Engineering are consumers and help define their data and compatibility requirements. Maintain compatibility and migration guidance for API changes because components and consumers may be deployed on different schedules. Performance Engineering and Data Engineering continues to own data lake ingestion and analysis.
 
-Shared validation checks, benchmark implementations, and their verdict rules should have one canonical source in the shared repository, used by Auto Action Trigger and surfaced by Rack Status. User Interfaces, Triage, and Scripts owns test content and workflows; Installation and Data owns cluster-side installation, operation, and execution infrastructure. Performance Engineering and Data Engineering reviews test thresholds and interpretation where relevant. Rack Status may retain operator workflows while using the shared tests and results through a supported interface.
+Shared validation checks, benchmark implementations, and their verdict rules should have one canonical source in CMODS, used by Auto Action Trigger and surfaced by Rack Status. User Interfaces, Triage, and Scripts owns test content and workflows; Installation and Data owns cluster-side installation, operation, and execution infrastructure. Performance Engineering and Data Engineering reviews test thresholds and interpretation where relevant. Rack Status may retain operator workflows while using the shared tests and results through a supported interface.
 
 Migrate tests incrementally: inventory and compare existing checks, preserve distinct platform and multi-node capabilities, and verify equivalent behavior and results on representative hardware before retiring duplicates. Preserve site-specific baselines and verdict semantics. Define a supported interface for requesting runs and obtaining status, verdicts, and evidence; existing filesystem and reporting-script integrations remain until a replacement is ready.
 
@@ -60,13 +118,13 @@ The whole stack
 
 ### Description
 
-This stream is responsible for the outcomes and review of cluster bring-up and making data available for other teams. This will be a cross functional team that has to work with teams such as Ethernet, InfiniBand, and NVLink Switches in order to get OpenTelemetry and other data available for teams to consume. You will be the vanguard on making sure the cluster is ready for us to begin testing on and you will collaborate with the AIC team to ensure everyone else can login and we have enough resources (space on filesystem, CPUs, RAM, and network.)
+This stream is responsible for the outcomes and review of cluster bring-up and making data available for other teams. During a project, you own installation and ensuring that the required databases and APIs are available. This will be a cross functional team that has to work with teams such as Ethernet, InfiniBand, and NVLink Switches in order to get OpenTelemetry and other data available for teams to consume. You will be the vanguard on making sure the cluster is ready for us to begin testing on and you will collaborate with the AIC team to ensure everyone else can login and we have enough resources (space on filesystem, CPUs, RAM, and network.)
 
 #### Project Responsibility
 
 - You will own telemetry collection, Prometheus, and Victoria Metrics, and provide data for Grafana dashboards owned by User Interfaces, Triage, and Scripts.
-- You will own the NVIS Rack Status API and data sources. User Interfaces, Triage, and Scripts owns the WebUI. The API and WebUI can remain in the same repository with directory-level review ownership.
-  - Auto Action Trigger results are available through existing filesystem and reporting-script integration; a supported interface for runs and results is a target for the shared repository.
+- You will own the NVIS Rack Status API and data sources. User Interfaces, Triage, and Scripts owns the WebUI. The API and WebUI will live in CMODS with directory-level review ownership.
+  - Auto Action Trigger results are available through existing filesystem and reporting-script integration; a supported interface for runs and results is a target for CMODS.
 - You will own getting Auto Action Trigger installed and running on the cluster and making its results available. User Interfaces, Triage, and Scripts owns the tests and conformance testing (formerly health checks) that it runs.
 - You will own NVIS P2P and distribution of containers and other files needed for testing.
 - You will collaborate across NVIS, including functions such as CVT, to make the data needed for validation available.
@@ -92,7 +150,7 @@ This stream is responsible for the outcomes and review of cluster bring-up and m
 
 ### Projects
 
-- **NVIS Rack Status** — own the API and data sources; the API and WebUI can share a repository with separate review owners.
+- **NVIS Rack Status** — own the API and data sources; the API and WebUI will live in CMODS with separate review owners.
 - **Observability** — collect telemetry and operate Prometheus and Victoria Metrics for downstream visualization and analysis.
 - **Auto Action Trigger** — own installation and operation on the cluster and make test results available; User Interfaces, Triage, and Scripts owns the tests and conformance testing it runs.
 - **NVIS P2P** — distribute containers and other files needed for testing.
@@ -110,15 +168,16 @@ This stream is responsible for the outcomes and review of cluster bring-up and m
 
 This stream is responsible for the outcomes and review of the interfaces, tests, and triage automation we use in our work. You will own the tests, conformance testing (formerly health checks), and scripts that automate triage. You will select and maintain test workflows, incorporating performance findings from Performance Engineering and Data Engineering. You will use the APIs and data provided by Installation and Data to deliver interfaces, scripts, and tests for project teams and Performance Engineering and Data Engineering.
 
+During a project, this stream is accountable for ensuring the workflow works end to end. That includes checking that observability is working, conformance is being followed, agents are running, and issues are being resolved by their action owners. Coordinating and verifying resolution does not make this stream responsible for implementing every fix.
+
 #### Project Responsibility
 
 - You will own Grafana dashboards and the visualization of telemetry provided by Installation and Data.
 - You will own the NVIS Rack Status WebUI and consume the API provided by Installation and Data.
 - You will build and maintain scripts that automate triage and help the team run the right tests.
 - You will own test implementation, selection, and configuration, including conformance testing. You will incorporate tuning recommendations and performance validation from Performance Engineering and Data Engineering.
-- Shared tests and verdict rules have one canonical source in the shared repository and are used by Auto Action Trigger and Rack Status. This stream owns test content regardless of execution infrastructure.
-- For the proposed Software Factory project, the intended scope is automation of test workflows.
-- For the proposed Documentation Tooling project, the intended scope is publishing and accessing team documentation.
+- Shared tests and verdict rules have one canonical source in CMODS and are used by Auto Action Trigger and Rack Status. This stream owns test content regardless of execution infrastructure.
+- You will own and maintain CMODS CI/CD for software and documentation, including automated checks, builds, releases, deployment, and documentation publishing. Everyone owns documentation content and contributes updates, with reviews from the affected streams.
 - This stream ends in user interfaces, including CLIs, WebUIs, and MCPs.
 
 ### Who?
@@ -131,25 +190,23 @@ This stream is responsible for the outcomes and review of the interfaces, tests,
 
 - Grafana
 - NVIS Rack Status - WebUI
-- Software Factory (Proposed)
-- Documentation Tooling (Proposed)
+- CMODS CI/CD for software and documentation
 - Tests and conformance workflows run by Auto Action Trigger
 - CLIs, WebUIs, and MCPs for validation workflows
 - Triage automation scripts and test workflows
 
 ### Projects
 
-- **NVIS Rack Status** — own the WebUI and consume the API provided by Installation and Data; the API and WebUI can share a repository with separate review owners.
+- **NVIS Rack Status** — own the WebUI and consume the API provided by Installation and Data; the API and WebUI will live in CMODS with separate review owners.
 - **Observability** — own Grafana dashboards and visualization of telemetry provided by Installation and Data.
-- **Software Factory (Proposed)** — automation of test workflows.
-- **Documentation Tooling (Proposed)** — publishing and accessing team documentation.
-- **Tests and Conformance** — own tests, conformance testing, test selection and configuration, and triage automation, including workflows run by Auto Action Trigger. Shared test implementations and verdict rules have one canonical source in the shared repository.
+- **CMODS CI/CD** — own the repository's CI/CD process for software and documentation, including automated checks, builds, releases, deployment, and documentation publishing. Documentation content is owned by everyone.
+- **Tests and Conformance** — own tests, conformance testing, test selection and configuration, and triage automation, including workflows run by Auto Action Trigger. Shared test implementations and verdict rules have one canonical source in CMODS.
 
 ### Interactions with Other Streams
 
 - Consume the API and data service provided by Installation and Data.
 - Provide interfaces, scripts, and tests to Performance Engineering and Data Engineering; incorporate its findings into test selection, configuration, and triage automation.
-- Support Working on Projects with interfaces for running tests, reviewing results, and performing initial triage. Project teams perform initial triage; this stream is responsible for seeing issues in interfaces, tests, conformance workflows, and automation through to resolution.
+- Support Working on Projects with interfaces for running tests, reviewing results, and performing initial triage. Project teams perform initial triage; this stream tracks issues across the end-to-end workflow, coordinates with the responsible action owners, and verifies that fixes restore the workflow. It owns outcomes and review within its area, while implementation of fixes can involve any stream.
 - Collaborate with Rest of World (RoW) to ensure alignment.
 
 ## Performance Engineering and Data Engineering
@@ -157,6 +214,8 @@ This stream is responsible for the outcomes and review of the interfaces, tests,
 ### Description
 
 This stream is responsible for the outcomes and review of performance engineering, data engineering, and cross-project analysis, including learning where to focus fixes and how to tune systems and test configurations to meet expected performance. You will be the primary source of help for understanding tests that run but produce low performance. You will turn results into evidence that supports decisions during customer engagements and builds our understanding across projects.
+
+During a project, this stream is accountable for ensuring tests are passing and the reported numbers make sense, working with the project team and the owners of any required fixes. When project capacity allows, you will also experiment to improve performance or gather useful data.
 
 #### Project Responsibility
 
