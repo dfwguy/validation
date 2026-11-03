@@ -22,6 +22,18 @@ Team calls will be organized around these streams. The aim is to establish clear
 
 People are listed under each stream’s “Who?” section. For projects shared across streams, each project entry describes that stream’s responsibility. All projects support the shared Working on Projects stream.
 
+## Shared Repository and Review Ownership
+
+We intend to bring NVIS Rack Status and Auto Action Trigger into one repository, with clear directories for the API and data access, user interfaces, shared validation tests and verdicts, and cluster-side execution. This is a target model; the existing repositories and integration remain in place until migration is planned and verified. A shared repository does not require a single service, release, or deployment: the API, user interfaces, and cluster-side execution can retain independent build and deployment paths.
+
+Each area has a primary owning stream. GitLab directory ownership and merge request approval rules should require review from the responsible stream for changes in its area. Changes across areas need review from each affected stream. Installation and Data reviews changes to API contracts and source-data schemas; the consuming streams also review changes that affect their use. Ownership rules must cover contracts and schemas wherever they live, not just files in an API directory. Verify that GitLab approval settings enforce the intended reviews, including for changes spanning multiple areas. AI-assisted changes follow the same review process.
+
+Installation and Data owns the versioned source-data API and its contract. User Interfaces, Triage, and Scripts and Performance Engineering and Data Engineering are consumers and help define their data and compatibility requirements. Maintain compatibility and migration guidance for API changes because components and consumers may be deployed on different schedules. Performance Engineering and Data Engineering continues to own data lake ingestion and analysis.
+
+Shared validation checks, benchmark implementations, and their verdict rules should have one canonical source in the shared repository, used by Auto Action Trigger and surfaced by Rack Status. User Interfaces, Triage, and Scripts owns test content and workflows; Installation and Data owns cluster-side installation, operation, and execution infrastructure. Performance Engineering and Data Engineering reviews test thresholds and interpretation where relevant. Rack Status may retain operator workflows while using the shared tests and results through a supported interface.
+
+Migrate tests incrementally: inventory and compare existing checks, preserve distinct platform and multi-node capabilities, and verify equivalent behavior and results on representative hardware before retiring duplicates. Preserve site-specific baselines and verdict semantics. Define a supported interface for requesting runs and obtaining status, verdicts, and evidence; existing filesystem and reporting-script integrations remain until a replacement is ready.
+
 ## Working on Projects -- Testing, Validation, and Benchmarking
 
 ### Description
@@ -45,8 +57,8 @@ This is the group that will be focused on cluster bring-up as well as getting it
 #### Project Responsibility
 
 - You will own telemetry collection, Prometheus, and Victoria Metrics, and provide data for Grafana dashboards owned by User Interfaces, Triage, and Scripts.
-- You will own the NVIS Rack Status API and data sources. User Interfaces, Triage, and Scripts owns the WebUI. This ownership split is separate from the proposed future split of the API and WebUI into separate projects.
-  - Auto Action Trigger results are available on the filesystem; access through the Rack Status API is planned.
+- You will own the NVIS Rack Status API and data sources. User Interfaces, Triage, and Scripts owns the WebUI. The API and WebUI can remain in the same repository with directory-level review ownership.
+  - Auto Action Trigger results are available through existing filesystem and reporting-script integration; a supported interface for runs and results is a target for the shared repository.
 - You will own getting Auto Action Trigger installed and running on the cluster and making its results available. User Interfaces, Triage, and Scripts owns the tests and conformance testing (formerly health checks) that it runs.
 - You will own NVIS P2P and distribution of containers and other files needed for testing.
 - You will collaborate across NVIS, including functions such as CVT, to make the data needed for validation available.
@@ -72,7 +84,7 @@ This is the group that will be focused on cluster bring-up as well as getting it
 
 ### Projects
 
-- **NVIS Rack Status** — own the API and data sources; separate API and WebUI projects are proposed.
+- **NVIS Rack Status** — own the API and data sources; the API and WebUI can share a repository with separate review owners.
 - **Observability** — collect telemetry and operate Prometheus and Victoria Metrics for downstream visualization and analysis.
 - **Auto Action Trigger** — own installation and operation on the cluster and make test results available; User Interfaces, Triage, and Scripts owns the tests and conformance testing it runs.
 - **NVIS P2P** — distribute containers and other files needed for testing.
@@ -96,7 +108,7 @@ This is the group that makes the data visible and builds the interfaces we use i
 - You will own the NVIS Rack Status WebUI and consume the API provided by Installation and Data.
 - You will build and maintain scripts that automate triage and help the team run the right tests.
 - You will own test implementation, selection, and configuration, including conformance testing. You will incorporate tuning recommendations and performance validation from Performance Engineering and Data Engineering.
-- Tests can live in separate repositories and be pulled into the project that runs them, including Auto Action Trigger. Test ownership stays with this stream regardless of repository location.
+- Shared tests and verdict rules have one canonical source in the shared repository and are used by Auto Action Trigger and Rack Status. This stream owns test content regardless of execution infrastructure.
 - For the proposed Software Factory project, the intended scope is automation of test workflows.
 - For the proposed Documentation Tooling project, the intended scope is publishing and accessing team documentation.
 - This stream ends in user interfaces, including CLIs, WebUIs, and MCPs.
@@ -119,11 +131,11 @@ This is the group that makes the data visible and builds the interfaces we use i
 
 ### Projects
 
-- **NVIS Rack Status** — own the WebUI and consume the API provided by Installation and Data; separate API and WebUI projects are proposed.
+- **NVIS Rack Status** — own the WebUI and consume the API provided by Installation and Data; the API and WebUI can share a repository with separate review owners.
 - **Observability** — own Grafana dashboards and visualization of telemetry provided by Installation and Data.
 - **Software Factory (Proposed)** — automation of test workflows.
 - **Documentation Tooling (Proposed)** — publishing and accessing team documentation.
-- **Tests and Conformance** — own tests, conformance testing, test selection and configuration, and triage automation, including workflows run by Auto Action Trigger. Tests may be maintained in separate repositories and pulled into the project that runs them.
+- **Tests and Conformance** — own tests, conformance testing, test selection and configuration, and triage automation, including workflows run by Auto Action Trigger. Shared test implementations and verdict rules have one canonical source in the shared repository.
 
 ### Interactions with Other Streams
 
