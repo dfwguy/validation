@@ -8,40 +8,6 @@ All projects and documentation are moving into the **CMODS** monorepo. Everyone 
 | **Interfaces** (User Interfaces, Triage, and Scripts) | End-to-end workflow health: observability works, conformance is followed, agents run, and issues get resolved by their action owners. Grafana dashboards, Rack Status WebUI, shared test implementations and workflows, triage automation, and CLIs/WebUIs/MCPs. **CMODS CI/CD for software and documentation**, including checks, builds, releases, deployment, and publishing. |
 | **Performance Engineering and Data Engineering** | Ensuring tests pass and numbers make sense; performance investigations, tuning recommendations, and validation; experiments when capacity allows; data lake ingestion and analysis; reusable analysis methods, notebooks, charts, and findings. |
 
-The diagram shows the main handoffs and collaborations. All three teams share customer project work, initial triage, and documentation. Interfaces coordinates and verifies issue resolution with the responsible action owners without owning every fix.
-
-```mermaid
-flowchart TB
-    subgraph team["Our team — shared CMODS monorepo and documentation"]
-        install["Installation and Data"]
-        interfaces["Interfaces<br/>User Interfaces, Triage, and Scripts<br/>Software and documentation CI/CD"]
-        performance["Performance Engineering<br/>and Data Engineering"]
-        projects["Shared customer project work<br/>Testing, initial triage, and documentation"]
-
-        install -->|"APIs, telemetry, and execution infrastructure"| interfaces
-        interfaces -->|"Data requirements and workflow issues"| install
-        install -->|"Source data and Parquet exports"| performance
-        performance -->|"Readiness and telemetry needs"| install
-        interfaces -->|"Interfaces, scripts, and tests"| performance
-        performance -->|"Findings, tuning, and threshold reviews"| interfaces
-        install ---|"Installation and data readiness"| projects
-        interfaces ---|"End-to-end workflow and issue follow-through"| projects
-        performance ---|"Passing tests and credible results"| projects
-    end
-
-    subgraph external["Groups outside our team"]
-        aic["AIC"]
-        nvis["Ethernet, InfiniBand,<br/>NVLink Switches, and CVT"]
-        row["Rest of World — RoW"]
-        dre["Deployment Readiness Engineering — DRE"]
-    end
-
-    aic <-->|"Cluster access and resource readiness"| install
-    nvis <-->|"Network readiness, telemetry, and validation data"| install
-    row <-->|"Alignment"| interfaces
-    dre <-->|"Performance and readiness collaboration"| performance
-```
-
 # Overall Leads
 
 ## Description
@@ -116,6 +82,26 @@ The whole stack
 
 ## Installation and Data
 
+### Team interactions
+
+```mermaid
+flowchart LR
+    team["Installation and Data"]
+    interfaces["User Interfaces, Triage, and Scripts"]
+    performance["Performance Engineering and Data Engineering"]
+    projects["Shared customer projects"]
+    aic["AIC"]
+    nvis["Ethernet, InfiniBand, NVLink Switches, and CVT"]
+    team -->|"APIs, telemetry, and execution infrastructure"| interfaces
+    interfaces -->|"Data requirements and workflow issues"| team
+    team -->|"Source data and Parquet exports"| performance
+    performance -->|"Readiness and telemetry needs"| team
+    team ---|"Installation and data readiness"| projects
+    aic <-->|"Cluster access and resource readiness"| team
+    nvis <-->|"Network readiness, telemetry, and validation data"| team
+```
+
+
 ### Description
 
 This stream is responsible for the outcomes and review of cluster bring-up and making data available for other teams. During a project, you own installation and ensuring that the required databases and APIs are available. This will be a cross functional team that has to work with teams such as Ethernet, InfiniBand, and NVLink Switches in order to get OpenTelemetry and other data available for teams to consume. You will be the vanguard on making sure the cluster is ready for us to begin testing on and you will collaborate with the AIC team to ensure everyone else can login and we have enough resources (space on filesystem, CPUs, RAM, and network.)
@@ -164,6 +150,24 @@ This stream is responsible for the outcomes and review of cluster bring-up and m
 
 ## User Interfaces, Triage, and Scripts
 
+### Team interactions
+
+```mermaid
+flowchart LR
+    team["User Interfaces, Triage, and Scripts"]
+    install["Installation and Data"]
+    performance["Performance Engineering and Data Engineering"]
+    projects["Shared customer projects"]
+    row["Rest of World — RoW"]
+    install -->|"APIs, telemetry, and execution infrastructure"| team
+    team -->|"Data requirements and workflow issues"| install
+    team -->|"Interfaces, scripts, and tests"| performance
+    performance -->|"Findings, tuning, and threshold reviews"| team
+    team ---|"End-to-end workflow and issue follow-through"| projects
+    row <-->|"Alignment"| team
+```
+
+
 ### Description
 
 This stream is responsible for the outcomes and review of the interfaces, tests, and triage automation we use in our work. You will own the tests, conformance testing (formerly health checks), and scripts that automate triage. You will select and maintain test workflows, incorporating performance findings from Performance Engineering and Data Engineering. You will use the APIs and data provided by Installation and Data to deliver interfaces, scripts, and tests for project teams and Performance Engineering and Data Engineering.
@@ -210,6 +214,24 @@ During a project, this stream is accountable for ensuring the workflow works end
 - Collaborate with Rest of World (RoW) to ensure alignment.
 
 ## Performance Engineering and Data Engineering
+
+### Team interactions
+
+```mermaid
+flowchart LR
+    team["Performance Engineering and Data Engineering"]
+    install["Installation and Data"]
+    interfaces["User Interfaces, Triage, and Scripts"]
+    projects["Shared customer projects"]
+    dre["Deployment Readiness Engineering — DRE"]
+    install -->|"Source data and Parquet exports"| team
+    team -->|"Readiness and telemetry needs"| install
+    interfaces -->|"Interfaces, scripts, and tests"| team
+    team -->|"Findings, tuning, and threshold reviews"| interfaces
+    team ---|"Passing tests and credible results"| projects
+    dre <-->|"Performance and readiness collaboration"| team
+```
+
 
 ### Description
 
